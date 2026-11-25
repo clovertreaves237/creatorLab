@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 
 /**
  * Supabase Auth Callback Route
@@ -9,8 +10,7 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   // Accept ?next= or ?redirect=, but only paths inside CreatorLab (no open redirect to other sites)
-  const requested = requestUrl.searchParams.get("next") || requestUrl.searchParams.get("redirect") || "";
-  const next = requested.startsWith("/") && !requested.startsWith("//") && !requested.includes("\\") ? requested : "/niches";
+  const next = safeRedirectPath(requestUrl.searchParams.get("next") || requestUrl.searchParams.get("redirect"));
 
   if (code) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";

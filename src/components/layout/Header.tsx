@@ -100,8 +100,8 @@ export function Header() {
     await supabase.auth.signOut();
     setUser(null);
     setUserDropdownOpen(false);
-    router.push("/");
-    router.refresh();
+    // Full load: drops pages cached while signed in, so no stale signed-in UI or redirects remain
+    window.location.replace("/signin");
   };
 
   // Staff links come from the server (database role); the admin path is only sent to admins (FR-6).

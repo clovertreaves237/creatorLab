@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 import { Logo } from "@/components/ui/Logo";
 import { Eye, EyeOff, Loader2, ShieldCheck, PenLine, ArrowRight, ShieldAlert } from "lucide-react";
 
@@ -15,11 +16,7 @@ function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // Only redirect inside CreatorLab ("/path"), never to another site ("https://…" or "//host")
-  const requestedRedirect = searchParams.get("redirect") || "";
-  const redirectPath =
-    requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//") && !requestedRedirect.includes("\\")
-      ? requestedRedirect
-      : "/niches";
+  const redirectPath = safeRedirectPath(searchParams.get("next") || searchParams.get("redirect"));
   const supabase = createClient();
 
   const [email, setEmail] = useState("");
@@ -35,6 +32,7 @@ function SignInContent() {
     setErrorMessage(null);
 
     const cleanEmail = email.trim().toLowerCase();
+    let leaving = false;
 
     // Everyone, including staff, signs in the same way. Roles come from the database,
     // and admins open the admin portal from their account menu.
@@ -54,12 +52,18 @@ function SignInContent() {
       }
 
       if (data.session) {
-        router.push(redirectPath);
+        // Full page load, not router.push: the client router may still hold the "/niches -> /signin"
+        // redirect it prefetched while signed out. A fresh request carries the new session cookies through
+        // the middleware, and replace() keeps the sign-in page out of the Back history.
+        leaving = true;
+        window.location.replace(redirectPath);
+        return;
       }
+      setErrorMessage("Sign-in did not complete. Please try again.");
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to sign in.");
     } finally {
-      setLoading(false);
+      if (!leaving) setLoading(false); // keep the button spinner while the next page loads
     }
   };
 
@@ -79,42 +83,9 @@ function SignInContent() {
         return;
       }
     } catch (err: unknown) {
-      console.warn(`Direct OAuth for ${provider} not configured in Supabase. Seamless functional fallback engaged:`, err);
-      // Guarantee functional authentication for user
-      try {
-        const socialEmail = `${provider}.creator@creatorlab.com`;
-        const socialPassword = `CreatorLab_${provider}_2026!`;
-
-        let { data: authData, error: signInErr } = await supabase.auth.signInWithPassword({
-          email: socialEmail,
-          password: socialPassword,
-        });
-
-        if (signInErr) {
-          const { error: signUpErr } = await supabase.auth.signUp({
-            email: socialEmail,
-            password: socialPassword,
-            options: {
-              data: {
-                first_name: provider.charAt(0).toUpperCase() + provider.slice(1),
-                last_name: "Creator",
-                display_name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
-                role: "user",
-              },
-            },
-          });
-
-          if (!signUpErr) {
-            await supabase.auth.signInWithPassword({
-              email: socialEmail,
-              password: socialPassword,
-            });
-          }
-        }
-        router.push(redirectPath);
-      } catch {
-        router.push(redirectPath);
-      }
+      console.warn(`${provider} sign-in failed:`, err);
+      const name = provider.charAt(0).toUpperCase() + provider.slice(1);
+      setErrorMessage(`${name} sign-in is not available right now. Please use your email and password.`);
     } finally {
       setSocialLoading(null);
     }

@@ -89,7 +89,9 @@ export function SignUpForm() {
           router.push(`/verify-email?email=${encodeURIComponent(email)}`);
         }, 1200);
       } else {
-        router.push("/niches");
+        // Signed in straight away (email confirmation off): full load so the middleware sees the new session
+        window.location.replace("/niches");
+        return;
       }
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "An unexpected error occurred.");
@@ -114,41 +116,9 @@ export function SignUpForm() {
         return;
       }
     } catch (err: unknown) {
-      console.warn(`Direct OAuth for ${provider} fallback in sign-up:`, err);
-      try {
-        const socialEmail = `${provider}.creator@creatorlab.com`;
-        const socialPassword = `CreatorLab_${provider}_2026!`;
-
-        let { error: signInErr } = await supabase.auth.signInWithPassword({
-          email: socialEmail,
-          password: socialPassword,
-        });
-
-        if (signInErr) {
-          const { error: signUpErr } = await supabase.auth.signUp({
-            email: socialEmail,
-            password: socialPassword,
-            options: {
-              data: {
-                first_name: provider.charAt(0).toUpperCase() + provider.slice(1),
-                last_name: "Creator",
-                display_name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
-                role: "user",
-              },
-            },
-          });
-
-          if (!signUpErr) {
-            await supabase.auth.signInWithPassword({
-              email: socialEmail,
-              password: socialPassword,
-            });
-          }
-        }
-        router.push("/niches");
-      } catch {
-        router.push("/niches");
-      }
+      console.warn(`${provider} sign-up failed:`, err);
+      const name = provider.charAt(0).toUpperCase() + provider.slice(1);
+      setErrorMessage(`${name} sign-up is not available right now. Please sign up with your email and password.`);
     } finally {
       setSocialLoading(null);
     }

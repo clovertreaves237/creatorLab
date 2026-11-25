@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { DEFAULT_AFTER_LOGIN, safeRedirectPath } from "@/lib/auth/redirect";
 
 /**
  * Root middleware:
@@ -80,7 +81,9 @@ export async function middleware(request: NextRequest) {
   // Authenticated users visiting "/" or auth pages are redirected to "/niches"
   if (path === "/" || path === "/signin" || path === "/signup") {
     if (user && user.email_confirmed_at) {
-      return NextResponse.redirect(new URL("/niches", request.url));
+      const params = request.nextUrl.searchParams;
+      const target = path === "/" ? DEFAULT_AFTER_LOGIN : safeRedirectPath(params.get("next") || params.get("redirect"));
+      return NextResponse.redirect(new URL(target, request.url));
     }
   }
 
@@ -99,7 +102,9 @@ export async function middleware(request: NextRequest) {
     if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = "/signin";
-      url.searchParams.set("redirect", path);
+      url.search = "";
+      // Remember the full destination (path + query) so the user returns to exactly where they were going
+      url.searchParams.set("redirect", path + request.nextUrl.search);
       return NextResponse.redirect(url);
     }
 
