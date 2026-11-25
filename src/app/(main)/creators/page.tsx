@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ALLOWED_NICHES, getNicheById, isLiveNiche } from "@/lib/constants/niches";
 import { CreatorData, VideoData, rankCreators } from "@/lib/constants/creators";
@@ -13,6 +13,11 @@ import Link from "next/link";
 import { track } from "@/lib/activity/track";
 import { useEntitlement } from "@/components/billing/useEntitlement";
 import type { OutlierCard, UnlockedOutlier } from "@/lib/outliers/shape";
+import { appendPage, clearFeeds, feedKey, readFeed, writeFeed, type FeedPage } from "@/lib/outliers/feed-cache";
+import { ThumbImage } from "@/components/creators/ThumbImage";
+
+/** Cards per page from /api/outliers (cursor pagination). */
+const PAGE_SIZE = 12;
 
 
 /** Favourites live in the database (per account). Old browser-only favourites are moved over once. */
@@ -102,34 +107,105 @@ function CreatorsContent() {
     }
   }, [savedLoaded, savedNiches, currentNicheId, router]);
 
-  // Outliers come from the server, already filtered by plan (locked cards carry no creator or video data)
-  const [outliers, setOutliers] = useState<{ youtube: OutlierCard[]; tiktok: OutlierCard[]; unlocked: boolean } | null>(null);
+  // Outliers come from the server, already filtered by plan (locked cards carry no creator or video data).
+  // Paged per platform (12 per page), cached per niche + platform (stale-while-revalidate), next page
+  // prefetched ~1500px before the end of the list.
+  type Feed = FeedPage<OutlierCard>;
+  const [feeds, setFeeds] = useState<{ youtube: Feed | null; tiktok: Feed | null }>(() => ({
+    youtube: readFeed<OutlierCard>(feedKey(activeNiche.id, "youtube")),
+    tiktok: readFeed<OutlierCard>(feedKey(activeNiche.id, "tiktok")),
+  }));
   const [outliersError, setOutliersError] = useState(false);
+  const loadingMore = useRef<Record<string, boolean>>({});
+
+  const fetchPage = useCallback(
+    async (platform: "youtube" | "tiktok", cursor: string | null, limit = PAGE_SIZE): Promise<Feed | null> => {
+      const q = new URLSearchParams({ niche: activeNiche.id, platform, limit: String(limit) });
+      if (cursor) q.set("cursor", cursor);
+      const res = await fetch(`/api/outliers?${q}`, { cache: "no-store" });
+      if (!res.ok) return null;
+      const j = await res.json();
+      return { items: j.items || [], total: j.total ?? 0, nextCursor: j.nextCursor ?? null, unlocked: Boolean(j.unlocked), plan: j.plan || "free" };
+    },
+    [activeNiche.id]
+  );
+
+  // First page of both platforms (tab counts right away). Cached data shows instantly; this refreshes it.
   const loadOutliers = useCallback(async () => {
-    setLoadingCurated(true);
+    const niche = activeNiche.id;
+    const cached = {
+      youtube: readFeed<OutlierCard>(feedKey(niche, "youtube")),
+      tiktok: readFeed<OutlierCard>(feedKey(niche, "tiktok")),
+    };
+    setFeeds(cached);
     setOutliersError(false);
+    setLoadingCurated(!cached.youtube || !cached.tiktok);
     try {
-      const res = await fetch(`/api/outliers?niche=${encodeURIComponent(activeNiche.id)}`, { cache: "no-store" });
-      const json = res.ok ? await res.json() : null;
-      if (!res.ok) setOutliersError(true); // show a real error instead of "No creators found"
-      setOutliers(json ? { youtube: json.youtube || [], tiktok: json.tiktok || [], unlocked: Boolean(json.unlocked) } : { youtube: [], tiktok: [], unlocked: false });
-      setCuratedList(((json ? [...json.youtube, ...json.tiktok] : []) as OutlierCard[]).filter((c): c is UnlockedOutlier => !c.locked));
+      const [yt, tt] = await Promise.all(
+        (["youtube", "tiktok"] as const).map((p) => fetchPage(p, null, Math.max(PAGE_SIZE, cached[p]?.items.length || 0)))
+      );
+      if (yt) writeFeed(feedKey(niche, "youtube"), yt);
+      if (tt) writeFeed(feedKey(niche, "tiktok"), tt);
+      setFeeds({ youtube: yt || cached.youtube, tiktok: tt || cached.tiktok });
+      if (!yt && !tt && !cached.youtube && !cached.tiktok) setOutliersError(true); // a real error, not "no creators"
     } catch (err) {
       console.warn("Error fetching curated creators:", err);
-      setOutliersError(true);
+      if (!cached.youtube && !cached.tiktok) setOutliersError(true);
     } finally {
       setLoadingCurated(false);
     }
-  }, [activeNiche.id]);
+  }, [activeNiche.id, fetchPage]);
   useEffect(() => {
     loadOutliers();
   }, [loadOutliers]);
-  // Plan + upgrade popup; reload the outliers when the plan changes (e.g. back from paying)
-  const { openUpgrade, upgradeModal } = useEntitlement(loadOutliers);
+
+  const loadMore = useCallback(
+    async (platform: "youtube" | "tiktok") => {
+      const current = feeds[platform];
+      if (!current?.nextCursor || loadingMore.current[platform]) return;
+      loadingMore.current[platform] = true;
+      try {
+        const next = await fetchPage(platform, current.nextCursor);
+        if (next) {
+          const merged = appendPage(current, next);
+          writeFeed(feedKey(activeNiche.id, platform), merged);
+          setFeeds((f) => ({ ...f, [platform]: merged }));
+        }
+      } finally {
+        loadingMore.current[platform] = false;
+      }
+    },
+    [feeds, fetchPage, activeNiche.id]
+  );
+
+  // Plan + upgrade popup; when the plan changes (e.g. back from paying) drop cached feeds and reload
+  const { openUpgrade, upgradeModal } = useEntitlement(() => {
+    clearFeeds();
+    loadOutliers();
+  });
+
+  // Keep favourites/curator tools working with the creators currently loaded
+  useEffect(() => {
+    setCuratedList([...(feeds.youtube?.items || []), ...(feeds.tiktok?.items || [])].filter((c): c is UnlockedOutlier => !c.locked));
+  }, [feeds]);
 
   // Only real creators from the database (curators + the team's source lists), ranked by engagement (FR-15)
-  const finalYoutube: OutlierCard[] = outliers?.youtube || [];
-  const finalTiktok: OutlierCard[] = outliers?.tiktok || [];
+  const finalYoutube: OutlierCard[] = feeds.youtube?.items || [];
+  const finalTiktok: OutlierCard[] = feeds.tiktok?.items || [];
+  const youtubeTotal = feeds.youtube?.total ?? finalYoutube.length;
+  const tiktokTotal = feeds.tiktok?.total ?? finalTiktok.length;
+
+  // Prefetch the next page well before the user reaches the end of the list
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && loadMore(activePlatform), {
+      rootMargin: "1500px 0px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore, activePlatform]);
 
   // Which video each card is showing (users can pick any of the creator's videos)
   const [pickedVideo, setPickedVideo] = useState<Record<string, string>>({});
@@ -203,7 +279,7 @@ function CreatorsContent() {
   };
 
   return (
-    <div className="flex-1 max-w-6xl mx-auto px-4 py-8 w-full text-left">
+    <div className="flex-1 max-w-6xl mx-auto px-4 py-8 w-full text-left min-h-[100dvh]">
       {/* ============================================================== */}
       {/* TOP HEADER & NICHE SWITCHER (FR-10 & FR-11)                   */}
       {/* ============================================================== */}
@@ -273,7 +349,7 @@ function CreatorsContent() {
                 : "text-pencil hover:text-ink"
             }`}
           >
-            <span>YouTube Group ({finalYoutube.length})</span>
+            <span>YouTube Group ({youtubeTotal})</span>
           </button>
           <button
             onClick={() => {
@@ -286,7 +362,7 @@ function CreatorsContent() {
                 : "text-pencil hover:text-ink"
             }`}
           >
-            <span>TikTok Group ({finalTiktok.length})</span>
+            <span>TikTok Group ({tiktokTotal})</span>
           </button>
         </div>
 
@@ -325,10 +401,23 @@ function CreatorsContent() {
       {/* ============================================================== */}
       {upgradeModal}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {loadingCurated ? (
-          <div className="col-span-full py-16 flex flex-col items-center justify-center text-center">
-            <MobiusLoader size="md" label="Loading curated creators..." />
-          </div>
+        {loadingCurated && activeCreators.length === 0 ? (
+          [0, 1, 2].map((i) => (
+            <div key={`skeleton-${i}`} aria-hidden className="h-[520px] rounded-2xl border-2 border-line bg-white p-6">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-paper-deep" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 w-2/3 rounded bg-paper-deep" />
+                  <div className="h-3 w-1/3 rounded bg-paper-deep" />
+                </div>
+              </div>
+              <div className="mt-5 h-6 w-1/2 rounded bg-paper-deep" />
+              <div className="mt-4 aspect-video w-full rounded-xl bg-paper-deep" />
+              <div className="mt-4 h-3.5 w-5/6 rounded bg-paper-deep" />
+              <div className="mt-2 h-3.5 w-2/3 rounded bg-paper-deep" />
+              <div className="mt-6 h-9 w-full rounded-xl bg-paper-deep" />
+            </div>
+          ))
         ) : outliersError ? (
           <div className="col-span-full flex flex-col items-center gap-4 rounded-2xl border-2 border-ink bg-white p-10 text-center">
             <p className="text-lg font-extrabold text-ink">We couldn&apos;t load the creators</p>
@@ -397,6 +486,7 @@ function CreatorsContent() {
             <div
               key={creator.id}
               className="hand-card p-6 flex flex-col justify-between"
+              style={{ contentVisibility: "auto", containIntrinsicSize: "auto 520px" }}
             >
               <div>
                 {/* FR-14 Creator Header */}
@@ -517,10 +607,11 @@ function CreatorsContent() {
                       ) : (
                         <>
                           {mainVideo.thumbnail_url ? (
-                            <img
+                            <ThumbImage
                               src={mainVideo.thumbnail_url}
                               alt={mainVideo.title}
-                              className="w-full h-full object-cover transition-transform duration-300"
+                              sizes="(max-width: 767px) 92vw, (max-width: 1023px) 46vw, 380px"
+                              priority={rankIndex === 0}
                             />
                           ) : (
                             <div className="w-full h-full bg-paper-deep flex flex-col items-center justify-center gap-1 px-6 text-center">
@@ -688,8 +779,8 @@ function CreatorsContent() {
                             }}
                             className="w-full flex items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-paper transition-colors"
                           >
-                            <span className="w-14 aspect-video shrink-0 rounded border border-line bg-paper-deep overflow-hidden">
-                              {v.thumbnail_url && <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />}
+                            <span className="relative w-14 aspect-video shrink-0 rounded border border-line bg-paper-deep overflow-hidden">
+                              {v.thumbnail_url && <ThumbImage src={v.thumbnail_url} alt="" sizes="64px" />}
                             </span>
                             <span className="min-w-0 flex-1 text-[11px] text-ink line-clamp-2 leading-snug">{v.title}</span>
                             {v.duration_formatted && (
@@ -761,6 +852,8 @@ function CreatorsContent() {
           );
         }))}
       </div>
+      {/* Prefetch trigger: the next page loads ~1500px before the user gets here */}
+      <div ref={sentinelRef} aria-hidden className="h-px w-full" />
 
       {/* ============================================================== */}
       {/* VIDEO EMBED MODAL (FR-18, FR-19, FR-20)                        */}
@@ -790,7 +883,7 @@ export default function CreatorsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex-1 flex items-center justify-center min-h-[60vh]">
+        <div className="flex-1 flex items-center justify-center min-h-[100dvh]">
           <MobiusLoader
             variant="general"
             size="md"

@@ -31,7 +31,11 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "i.ytimg.com" },
       { protocol: "https", hostname: "yt3.ggpht.com" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
+      // Curator-uploaded thumbnails and profile pictures (Supabase Storage public buckets)
+      { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/**" },
     ],
+    // Thumbnails rarely change: cache optimized versions for a day
+    minimumCacheTTL: 86400,
   },
 };
 

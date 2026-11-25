@@ -40,10 +40,10 @@ test("CreatorLab Functional Requirements: Niche Preferences (FR-8..12) & Creator
     assert.doesNotMatch(creatorsSource, /YOUTUBE_CREATORS_RAW|TIKTOK_CREATORS_RAW|CURATOR_PROFILES/, "No invented creators or curators");
     // Creators come from the database, read on the server and filtered by plan (/api/outliers)
     assert.match(fs.readFileSync("src/app/api/outliers/route.ts", "utf8"), /\.from\("creators"\)/, "Creators come from the database");
-    assert.match(creatorsPageSource, /\/api\/outliers\?niche=/, "Creators page loads them from the server route");
+    assert.match(creatorsPageSource, /fetch\(`\/api\/outliers\?\$\{q\}`/, "Creators page loads them from the server route");
     assert.doesNotMatch(creatorsPageSource, /getCuratedCreatorsForNiche/, "No baseline/demo creators merged in");
-    assert.match(creatorsPageSource, /YouTube Group \(\{finalYoutube\.length\}\)/, "YouTube group count visible");
-    assert.match(creatorsPageSource, /TikTok Group \(\{finalTiktok\.length\}\)/, "TikTok group count visible");
+    assert.match(creatorsPageSource, /YouTube Group \(\{youtubeTotal\}\)/, "YouTube group count visible (all cards in the niche)");
+    assert.match(creatorsPageSource, /TikTok Group \(\{tiktokTotal\}\)/, "TikTok group count visible (all cards in the niche)");
     assert.ok(fs.existsSync("scripts/build-creators-seed.cjs"), "Source-list importer exists");
   });
 

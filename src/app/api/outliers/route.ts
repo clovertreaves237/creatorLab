@@ -25,6 +25,9 @@ function readNiche(db: SupabaseClient, nicheId: string) {
  *   free plan                    -> the #1 card per platform in full, the rest as placeholders (rank only)
  * Locked creators and videos are never sent to the browser.
  *
+ * Pagination: ?platform=youtube|tiktok&cursor=&limit= returns { items, total, nextCursor } (one page);
+ * without it, both full lists (unchanged response).
+ *
  * Reads with the service key; if that is missing or fails, falls back to the signed-in user's own access
  * (database rules) so the page never goes blank. The reason is logged and the source is in X-Outliers-Source.
  */
@@ -60,8 +63,19 @@ export async function GET(request: NextRequest) {
   const youtube = lockOutliers(rankCreators(all.filter((c) => c.platform === "youtube")), unlocked, "youtube");
   const tiktok = lockOutliers(rankCreators(all.filter((c) => c.platform === "tiktok")), unlocked, "tiktok");
 
-  return NextResponse.json(
-    { plan, unlocked, youtube, tiktok },
-    { headers: { "Cache-Control": "private, no-store", "X-Outliers-Source": source } }
-  );
+  const headers = { "Cache-Control": "private, no-store", "X-Outliers-Source": source };
+
+  // Cursor pagination per platform (?platform=youtube|tiktok&cursor=<rank offset>&limit=12).
+  // Ranking and plan locking are applied to the whole niche first, so pages are just slices of the same list.
+  const platform = request.nextUrl.searchParams.get("platform");
+  if (platform === "youtube" || platform === "tiktok") {
+    const list = platform === "youtube" ? youtube : tiktok;
+    const cursor = Math.max(0, Number.parseInt(request.nextUrl.searchParams.get("cursor") || "0", 10) || 0);
+    const limit = Math.min(48, Math.max(1, Number.parseInt(request.nextUrl.searchParams.get("limit") || "12", 10) || 12));
+    const items = list.slice(cursor, cursor + limit);
+    const next = cursor + items.length;
+    return NextResponse.json({ plan, unlocked, items, total: list.length, nextCursor: next < list.length ? String(next) : null }, { headers });
+  }
+
+  return NextResponse.json({ plan, unlocked, youtube, tiktok }, { headers });
 }
