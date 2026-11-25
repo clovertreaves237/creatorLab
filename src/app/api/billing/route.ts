@@ -24,7 +24,14 @@ export async function GET() {
       .order("created_at", { ascending: false })
       .limit(20);
 
+    const isFree = allowance.plan === "free";
     return NextResponse.json({
+      // Entitlement summary (single source for the UI)
+      expiresAt: allowance.planUntil,
+      scriptsUsedToday: isFree ? allowance.free.used : allowance.usedToday,
+      scriptsLimit: isFree ? allowance.free.limit : allowance.dailyLimit,
+      nextAvailableAt: allowance.blocked?.nextAt ?? null,
+      outliersUnlocked: !isFree,
       plan: allowance.plan,
       planUntil: allowance.planUntil,
       free: allowance.free,

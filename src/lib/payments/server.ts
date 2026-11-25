@@ -176,3 +176,52 @@ export async function settlePendingPayments(userId: string): Promise<number> {
   }
   return settled;
 }
+
+/**
+ * Atomically checks the plan limit and records the script request (migration 7: reserve_script_slot).
+ * Two tabs or devices cannot both pass the limit. Returns requestId to refund with releaseScriptSlot() if
+ * generation fails. If the migration is not applied yet, it falls back to the non-atomic check already done.
+ */
+export async function reserveScriptSlot(
+  db: SupabaseClient,
+  allowance: Allowance | null,
+  isAdmin: boolean,
+  nicheId: string,
+  topic: string
+): Promise<{ ok: true; requestId: string | null } | { ok: false }> {
+  const now = Date.now();
+  let limit = 0;
+  let since = new Date(now - DAY_MS);
+  if (!isAdmin && allowance) {
+    if (allowance.plan === "free") {
+      limit = allowance.settings.freeScriptsPerDay;
+      since = new Date(now - DAY_MS);
+    } else {
+      limit = allowance.dailyLimit;
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      since = start;
+    }
+    if (allowance.plan === "free" && limit === 0) return { ok: false };
+  }
+  const { data, error } = await db.rpc("reserve_script_slot", {
+    p_niche: nicheId,
+    p_topic: topic,
+    p_limit: limit,
+    p_since: since.toISOString(),
+  });
+  if (error) {
+    console.warn("[scripts] atomic limit unavailable (apply migration 7):", error.message);
+    return { ok: true, requestId: null };
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.allowed) return { ok: false };
+  return { ok: true, requestId: row.request_id ?? null };
+}
+
+/** Refunds a reserved script slot after a failed generation. */
+export async function releaseScriptSlot(db: SupabaseClient, requestId: string | null) {
+  if (!requestId) return;
+  const { error } = await db.rpc("release_script_slot", { p_request_id: requestId });
+  if (error) console.warn("[scripts] could not release slot:", error.message);
+}

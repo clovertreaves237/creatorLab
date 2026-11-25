@@ -65,7 +65,8 @@ test("Portals walkthrough: database-backed, live, real data", async (t) => {
 
   await t.test("6. TikTok videos play on the page; favourites are saved on the account", () => {
     const page = fs.readFileSync("src/app/(main)/creators/page.tsx", "utf8");
-    assert.match(page, /tiktok\.com\/player\/v1\//);
+    // TikTok embed URL is built where outlier cards are shaped (server side)
+    assert.match(fs.readFileSync("src/lib/outliers/shape.ts", "utf8"), /tiktok\.com\/player\/v1\//);
     assert.doesNotMatch(page, /localStorage\.setItem\("creatorlab_favorite_creators"/);
     assert.match(page, /\/api\/favorites/);
   });

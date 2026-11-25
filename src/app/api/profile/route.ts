@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
+import { getPlan } from "@/lib/payments/server";
 import { getUserGeneratedScripts, getOperationsAnalytics } from "@/lib/scripts/storage";
 import { ALLOWED_NICHES } from "@/lib/constants/niches";
 
@@ -61,14 +63,25 @@ export async function GET(request: NextRequest) {
       .eq("active", true)
       .order("followers", { ascending: false, nullsFirst: false })
       .limit(6);
-    const { data: recentVideos } = await supabase
+    // Videos are outlier data: read on the server and limited by plan (free plan: 1).
+    let videoDb: any = supabase;
+    try {
+      videoDb = createServiceClient();
+    } catch {
+      /* service key missing: falls back to the user's own access */
+    }
+    const role = (await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()).data?.role;
+    const { plan } = await getPlan(user.id, user.email_confirmed_at ? role : "user");
+    const { data: recentVideosAll } = await videoDb
       .from("videos")
       .select("video_id, title, video_url, thumbnail_url, published_at, platform, creators!inner(display_name, niche_id, active)")
       .in("creators.niche_id", nicheFilter)
       .eq("creators.active", true)
       .order("published_at", { ascending: false })
       .limit(6);
-    const recommendedTopics = (recentVideos || []).map((v: any) => ({
+    const recentVideos = plan === "free" ? (recentVideosAll || []).slice(0, 1) : recentVideosAll || [];
+    const lockedTopics = plan === "free" ? Math.max(0, (recentVideosAll || []).length - recentVideos.length) : 0;
+    const recommendedTopics = recentVideos.map((v: any) => ({
       niche: v.creators?.niche_id,
       title: v.title,
       creator: v.creators?.display_name,
@@ -98,6 +111,7 @@ export async function GET(request: NextRequest) {
       recommendations: {
         creators: recommendedCreators || [],
         topics: recommendedTopics,
+        lockedTopics,
       },
     });
   } catch (error: any) {

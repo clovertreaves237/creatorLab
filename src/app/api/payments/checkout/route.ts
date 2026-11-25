@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { requireRole } from "@/lib/auth/roles";
 import { createServiceClient } from "@/lib/supabase/service";
 import { FapshiError, initiatePay, isFapshiTestMode } from "@/lib/payments/fapshi";
-import { loadBillingSettings } from "@/lib/payments/server";
+import { loadBillingSettings, settlePendingPayments } from "@/lib/payments/server";
 import { planCatalog, priceFor } from "@/lib/payments/logic";
 import { requestBaseUrl } from "@/lib/site-url";
 
@@ -51,6 +51,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Please wait a minute before starting another payment." }, { status: 429 });
   }
 
+  // Reuse a recent pending checkout for the same plan instead of piling up pending payments.
+  // (Settle first, so a link that was already paid is finished instead of being offered again.)
+  await settlePendingPayments(account.userId);
+  {
+    const { data: recent, error: recentError } = await db
+      .from("payments")
+      .select("external_id, checkout_url, created_at")
+      .eq("user_id", account.userId)
+      .eq("product", price.product)
+      .eq("status", "pending")
+      .not("checkout_url", "is", null)
+      .gte("created_at", new Date(Date.now() - 15 * 60 * 1000).toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!recentError && recent?.checkout_url) {
+      return NextResponse.json({ url: recent.checkout_url, ref: recent.external_id, testMode: isFapshiTestMode(), reused: true });
+    }
+  }
+
   const externalId = randomUUID();
   const testMode = isFapshiTestMode();
   const { data: payment, error: insertError } = await db
@@ -82,10 +102,11 @@ export async function POST(request: NextRequest) {
       message: `CreatorLab ${planCatalog(settings).find((p) => p.id === price.plan)!.name} plan, ${price.days} days`,
     });
 
-    const { error: saveError } = await db
-      .from("payments")
-      .update({ fapshi_trans_id: transId, provider_status: "CREATED", updated_at: new Date().toISOString() })
-      .eq("id", payment.id);
+    const saveFields = { fapshi_trans_id: transId, provider_status: "CREATED", updated_at: new Date().toISOString() };
+    let { error: saveError } = await db.from("payments").update({ ...saveFields, checkout_url: link }).eq("id", payment.id);
+    if (saveError && /checkout_url/.test(saveError.message)) {
+      ({ error: saveError } = await db.from("payments").update(saveFields).eq("id", payment.id)); // migration 7 not applied yet
+    }
     if (saveError) {
       console.error("[payments/checkout] could not save transId:", saveError.message);
       return NextResponse.json({ error: "Could not start the payment. Please try again." }, { status: 500 });

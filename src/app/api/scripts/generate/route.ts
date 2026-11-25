@@ -9,7 +9,7 @@ import {
 } from "@/lib/scripts/gemini";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole, hasRole } from "@/lib/auth/roles";
-import { getAllowance, settlePendingPayments } from "@/lib/payments/server";
+import { getAllowance, releaseScriptSlot, reserveScriptSlot, settlePendingPayments } from "@/lib/payments/server";
 import {
   saveGeneratedScript,
   getRecentScriptsForNiche,
@@ -92,29 +92,48 @@ export async function POST(request: NextRequest) {
 
     // Plans: free = free_scripts_per_day per rolling 24h; Pro (paid via Fapshi) and staff = daily_script_limit (NFR-20).
     // Admins are not limited. Enforced here on the server, whatever the browser shows.
-    if (!hasRole(gate.account.role, "admin")) {
-      let allowance = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
+    const isAdmin = hasRole(gate.account.role, "admin");
+    let allowance: Awaited<ReturnType<typeof getAllowance>> | null = null;
+    const blockedResponse = (a: typeof allowance) =>
+      NextResponse.json(
+        {
+          error: a?.blocked?.message || "You have reached your script limit for now.",
+          code: a?.blocked?.code || "FREE_LIMIT_REACHED",
+          nextAt: a?.blocked?.nextAt ?? null,
+          nextAvailableAt: a?.blocked?.nextAt ?? null,
+          plan: a?.plan ?? "free",
+          limit: a ? (a.plan === "free" ? a.free.limit : a.dailyLimit) : null,
+        },
+        { status: 429 }
+      );
+    if (!isAdmin) {
+      allowance = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
       // Just paid? Confirm any pending payment with Fapshi before refusing.
       if (allowance?.blocked && allowance.plan === "free" && (await settlePendingPayments(gate.account.userId)) > 0) {
         allowance = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
       }
-      if (allowance?.blocked) {
-        return NextResponse.json(
-          { error: allowance.blocked.message, code: allowance.blocked.code, nextAt: allowance.blocked.nextAt, plan: allowance.plan },
-          { status: 429 }
-        );
-      }
+      if (allowance?.blocked) return blockedResponse(allowance);
     }
 
     // Load Niche Training Pack (FR-29, FR-30, lessons + rules)
     const trainingPack = await getNicheTrainingPack(niche_id);
 
     // Database client + user captured now, while the request is active (used to save the script later)
-    const saveCtx = { supabase: await createClient(), userId: gate.account.userId };
+    const db = await createClient();
+
+    // Atomic limit: count + record this request in one locked step (two tabs cannot both pass). Gemini is not
+    // called when the slot is refused.
+    const slot = await reserveScriptSlot(db, allowance, isAdmin, niche_id, effectiveTopic);
+    if (!slot.ok) {
+      const fresh = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
+      return blockedResponse(fresh?.blocked ? fresh : allowance);
+    }
+    const saveCtx = { supabase: db, userId: gate.account.userId, requestId: slot.requestId };
 
     // Streaming mode (Creator Engine chat): words are sent to the browser as Gemini writes them.
     if (body.stream === true) {
       if (!resolvedApiKey) {
+        await releaseScriptSlot(db, slot.requestId);
         return NextResponse.json({ error: "Gemini API key is not configured on the server." }, { status: 500 });
       }
       return streamScriptResponse({
@@ -132,15 +151,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate 120s script with 1 retry on failure & 14-day deduplication constraints (FR-36, FR-30, FR-31, FR-32)
-    const result = await generate120sScript({
-      rules: trainingPack,
-      topic: effectiveTopic,
-      notes: sanitizedNotes,
-      pastHooks,
-      apiKey: resolvedApiKey,
-      targetDuration,
-      repeatCount: matchingTopicCount,
-    });
+    let result: Awaited<ReturnType<typeof generate120sScript>>;
+    try {
+      result = await generate120sScript({
+        rules: trainingPack,
+        topic: effectiveTopic,
+        notes: sanitizedNotes,
+        pastHooks,
+        apiKey: resolvedApiKey,
+        targetDuration,
+        repeatCount: matchingTopicCount,
+      });
+    } catch (genError) {
+      await releaseScriptSlot(db, slot.requestId); // failed generations do not use up the allowance
+      throw genError;
+    }
 
     // Notes are now discarded and will NOT be persisted (FR-33)
 
@@ -178,7 +203,7 @@ export async function POST(request: NextRequest) {
  * Notes are only used for the Gemini request and are never stored (FR-33).
  */
 function streamScriptResponse(args: {
-  saveCtx: { supabase: Awaited<ReturnType<typeof createClient>>; userId: string };
+  saveCtx: { supabase: Awaited<ReturnType<typeof createClient>>; userId: string; requestId?: string | null };
   request: NextRequest;
   apiKey: string;
   rules: string;
@@ -233,6 +258,8 @@ function streamScriptResponse(args: {
         });
       } catch (error: any) {
         if (!args.request.signal.aborted) {
+          // A real failure gives the slot back (stopping a script on purpose does not)
+          await releaseScriptSlot(args.saveCtx.supabase, args.saveCtx.requestId ?? null);
           console.error("Script stream error:", error?.message || error);
           send({ type: "error", error: error?.message || "Failed to generate script. Please try again." });
         }
@@ -299,7 +326,7 @@ async function recordAndSaveScript(
   niche_id: string,
   effectiveTopic: string,
   result: ScriptGenerationResult,
-  ctx: { supabase: Awaited<ReturnType<typeof createClient>>; userId: string }
+  ctx: { supabase: Awaited<ReturnType<typeof createClient>>; userId: string; requestId?: string | null }
 ) {
   // Extract hook from generated script for 14-day deduplication registry
   const hookMatch = result.script.match(/\[\d+:\d+\s*-\s*\d+:\d+\][^\n:]*:?\s*([^\n]+)/i);
@@ -307,14 +334,16 @@ async function recordAndSaveScript(
   const { supabase } = ctx;
   const currentUserId: string | undefined = ctx.userId || undefined;
 
-  // FR-35: Record script request in Supabase (WITHOUT notes)
-  const { error: requestError } = await supabase.from("script_requests").insert({
-    user_id: ctx.userId,
-    niche_id,
-    topic: effectiveTopic,
-    // STRICT FR-33 & FR-35: notes column does NOT exist in table and is never passed
-  });
-  if (requestError) console.error("[scripts] script_requests insert failed:", requestError.message);
+  // FR-35: Record script request in Supabase (WITHOUT notes). Already recorded when the slot was reserved.
+  if (!ctx.requestId) {
+    const { error: requestError } = await supabase.from("script_requests").insert({
+      user_id: ctx.userId,
+      niche_id,
+      topic: effectiveTopic,
+      // STRICT FR-33 & FR-35: notes column does NOT exist in table and is never passed
+    });
+    if (requestError) console.error("[scripts] script_requests insert failed:", requestError.message);
+  }
 
   // Save generated script with 14-day retention cycle for deduplication & user history
   const savedRecord = await saveGeneratedScript({

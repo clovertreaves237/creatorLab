@@ -46,7 +46,7 @@ test("After paying, users come back to the live app and the plan unlocks", async
     assert.match(gen, /settlePendingPayments\(gate\.account\.userId\)/);
 
     const ret = fs.readFileSync("src/app/(main)/billing/return/page.tsx", "utf8");
-    assert.match(ret, /window\.location\.replace\("\/script-generator"\)/, "success sends the user back into the app");
+    assert.match(ret, /window\.location\.replace\("\/script-generator\?upgraded=1"\)/, "success sends the user back into the app");
 
     const server = fs.readFileSync("src/lib/payments/server.ts", "utf8");
     assert.match(server, /export async function settlePendingPayments/);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAccount, hasRole, adminPortalPath } from "@/lib/auth/roles";
+import { getPlan } from "@/lib/payments/server";
 
 /**
  * GET /api/me: the signed-in user's role (from the database) and what they may open.
@@ -9,6 +10,7 @@ export async function GET() {
   const account = await getCurrentAccount();
   if (!account) return NextResponse.json({ signedIn: false }, { status: 401 });
   const isAdmin = hasRole(account.role, "admin");
+  const plan = await getPlan(account.userId, account.role).then((p) => p.plan).catch(() => "free");
   return NextResponse.json({
     signedIn: true,
     userId: account.userId,
@@ -19,6 +21,7 @@ export async function GET() {
     isCurator: hasRole(account.role, "curator"),
     isAdmin,
     isSuperAdmin: account.role === "super_admin",
+    plan, // free | creator | agency | staff
     adminPath: isAdmin ? adminPortalPath() || null : null,
   });
 }
