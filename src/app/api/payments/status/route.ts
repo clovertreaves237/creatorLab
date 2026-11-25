@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/roles";
 import { createServiceClient } from "@/lib/supabase/service";
-import { PAYMENT_COLUMNS, reconcileWithFapshi } from "@/lib/payments/server";
+import { PAYMENT_COLUMNS, readSubscription, reconcileWithFapshi } from "@/lib/payments/server";
 import { isUuid } from "@/lib/payments/logic";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +47,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const { data: sub } = await db.from("subscriptions").select("pro_until").eq("user_id", gate.account.userId).maybeSingle();
+  const { data: sub } = await readSubscription(db, gate.account.userId);
+  const isAgency = (payment as any).product === "agency_month";
 
   return NextResponse.json({
     status,
@@ -56,7 +57,9 @@ export async function GET(request: NextRequest) {
     days: payment.days,
     testMode: payment.test_mode,
     medium: payment.provider_medium,
-    proUntil: status === "successful" ? sub?.pro_until ?? null : null,
+    plan: isAgency ? "agency" : "creator",
+    planName: isAgency ? "Agency & Academy" : "Creator",
+    planUntil: status === "successful" ? (isAgency ? sub?.agency_until : sub?.pro_until) ?? null : null,
     createdAt: payment.created_at,
   });
 }

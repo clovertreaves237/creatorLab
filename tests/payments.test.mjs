@@ -41,19 +41,54 @@ const basePayment = { id: "p1", amount: 1000, status: "pending", fapshi_trans_id
 test("Fapshi payments", async (t) => {
   await t.test("1. Server-side price list (never from the browser)", () => {
     const s = L.parseBillingSettings([
-      { key: "pro_price_xaf", value: 2500 },
+      { key: "plan_creator_price_xaf", value: 5000 },
+      { key: "plan_agency_price_xaf", value: 50000 },
+      { key: "plan_agency_daily_scripts", value: 150 },
       { key: "pro_days", value: 30 },
       { key: "free_scripts_per_day", value: 1 },
       { key: "daily_script_limit", value: 20 },
     ]);
-    assert.deepEqual(L.priceFor("pro_pass", s), { product: "pro_pass", amount: 2500, days: 30 });
-    assert.equal(L.priceFor("pro_pass_cheap", s), null, "unknown products are refused");
-    assert.equal(L.priceFor({ amount: 1 }, s), null);
-    // Invalid / missing settings fall back to safe defaults (never below Fapshi's 100 XAF minimum)
-    const d = L.parseBillingSettings([{ key: "pro_price_xaf", value: 5 }, { key: "pro_days", value: "abc" }]);
-    assert.equal(d.proPriceXaf, 1000);
-    assert.equal(d.proDays, 30);
+    assert.deepEqual(L.priceFor("creator_month", s), { product: "creator_month", plan: "creator", amount: 5000, days: 30 });
+    assert.deepEqual(L.priceFor("agency_month", s), { product: "agency_month", plan: "agency", amount: 50000, days: 30 });
+    for (const bad of ["pro_pass", "agency_month_cheap", { amount: 1 }, null, "__proto__", "toString"]) {
+      assert.equal(L.priceFor(bad, s), null, `refuse ${JSON.stringify(bad)}`);
+    }
+    // Defaults: 5,000 and 50,000 XAF, never below Fapshi's 100 XAF minimum
+    const d = L.parseBillingSettings([{ key: "plan_creator_price_xaf", value: 5 }, { key: "pro_days", value: "abc" }]);
+    assert.equal(d.creatorPriceXaf, 5000);
+    assert.equal(d.agencyPriceXaf, 50000);
+    assert.equal(d.planDays, 30);
     assert.equal(d.freeScriptsPerDay, 1);
+  });
+
+  await t.test("1b. Agency & Academy always gives more than Creator", () => {
+    for (const rows of [
+      [],
+      [{ key: "daily_script_limit", value: 20 }, { key: "plan_agency_daily_scripts", value: 150 }],
+      [{ key: "daily_script_limit", value: 40 }, { key: "plan_agency_daily_scripts", value: 10 }], // misconfigured
+      [{ key: "daily_script_limit", value: 40 }, { key: "plan_agency_daily_scripts", value: 40 }], // equal
+    ]) {
+      const [creator, agency] = L.planCatalog(L.parseBillingSettings(rows));
+      assert.equal(creator.id, "creator");
+      assert.equal(agency.id, "agency");
+      assert.ok(agency.amount > creator.amount, "agency costs more");
+      assert.ok(agency.scriptsPerDay === 0 || agency.scriptsPerDay > creator.scriptsPerDay, `agency scripts ${agency.scriptsPerDay} > creator ${creator.scriptsPerDay}`);
+      assert.ok(agency.soundsPerHour > creator.soundsPerHour, "agency gets more sounds");
+      assert.ok(agency.features.length >= creator.features.length);
+    }
+    const plain = L.planCatalog(L.parseBillingSettings([]));
+    assert.match(plain[0].features[0], /20 scripts a day/);
+    assert.match(plain[1].features[0], /150 scripts a day/);
+  });
+
+  await t.test("1c. Active plan from subscription dates (Agency wins while both are active)", () => {
+    const now = new Date("2026-11-25T10:00:00Z");
+    const future = "2026-12-20T00:00:00Z", past = "2026-11-01T00:00:00Z";
+    assert.deepEqual(L.activePlan(null, now), { plan: "free", until: null });
+    assert.deepEqual(L.activePlan({ pro_until: past }, now), { plan: "free", until: null });
+    assert.deepEqual(L.activePlan({ pro_until: future }, now), { plan: "creator", until: future });
+    assert.deepEqual(L.activePlan({ pro_until: future, agency_until: future }, now), { plan: "agency", until: future });
+    assert.deepEqual(L.activePlan({ pro_until: future, agency_until: past }, now), { plan: "creator", until: future });
   });
 
   await t.test("2. Free plan: 1 script per rolling 24 hours, unlock time = last script + 24h", () => {
@@ -184,6 +219,17 @@ test("Fapshi payments", async (t) => {
     const example = fs.readFileSync(".env.example", "utf8");
     assert.match(example, /^FAPSHI_API_USER=$/m);
     assert.match(example, /^FAPSHI_API_KEY=$/m);
+  });
+
+  await t.test("14. Migration 6: two plans, agency end date, grant per product", () => {
+    const sql = fs.readFileSync("supabase/migrations/20261129000001_creator_agency_plans.sql", "utf8");
+    assert.match(sql, /product in \('pro_pass', 'creator_month', 'agency_month'\)/);
+    assert.match(sql, /add column if not exists agency_until timestamptz/);
+    assert.match(sql, /is_agency := \(p\.product = 'agency_month'\)/);
+    assert.match(sql, /if p\.granted_at is not null then\s+return 'already_granted'/);
+    assert.match(sql, /grant execute on function public\.grant_pro_for_payment[^;]*to service_role;/);
+    assert.match(sql, /'plan_creator_price_xaf', '5000'/);
+    assert.match(sql, /'plan_agency_price_xaf', '50000'/);
   });
 
   await t.test("13. Migration: RLS on, no browser writes, grant only for the service role", () => {

@@ -12,7 +12,9 @@ const ALLOWED: Record<string, (v: unknown) => boolean> = {
   daily_script_limit: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 1000,
   // Plans and Fapshi payments (the checkout reads these on the server)
   free_scripts_per_day: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 100,
-  pro_price_xaf: (v) => Number.isInteger(v) && (v as number) >= 100 && (v as number) <= 1_000_000,
+  plan_creator_price_xaf: (v) => Number.isInteger(v) && (v as number) >= 100 && (v as number) <= 5_000_000,
+  plan_agency_price_xaf: (v) => Number.isInteger(v) && (v as number) >= 100 && (v as number) <= 5_000_000,
+  plan_agency_daily_scripts: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 5000,
   pro_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 366,
 };
 

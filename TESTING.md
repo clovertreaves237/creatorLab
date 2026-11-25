@@ -1,21 +1,21 @@
 # Testing payments (Fapshi sandbox)
 
-CreatorLab sells one product: **CreatorLab Pro**, a pass paid once through Fapshi with
-**MTN Mobile Money** or **Orange Money**. No real money moves while the sandbox keys are used
-(the UI shows a yellow "Test mode · no real money" badge).
+CreatorLab sells two plans, each paid once through Fapshi with **MTN Mobile Money** or **Orange Money**
+(no automatic renewal). No real money moves while the sandbox keys are used (yellow "Test mode · no real money" badge).
 
-| Plan | What the user gets |
-|---|---|
-| Free | `free_scripts_per_day` scripts per rolling 24 hours (default **1**). The next free script unlocks 24 h after the last one. |
-| Pro | Keeps generating for `pro_days` days (default **30**), up to `daily_script_limit` scripts a day (default 20). Paying again adds days. |
-| Curators / admins | Not limited by the free plan (admins have no limit at all). |
+| Plan | Default price | What the user gets |
+|---|---|---|
+| Free | 0 XAF | `free_scripts_per_day` scripts per rolling 24 hours (default **1**), 20 background sounds an hour |
+| Creator | **5,000 XAF / 30 days** | up to `daily_script_limit` scripts a day (default 20), 20 sounds an hour |
+| Agency & Academy | **50,000 XAF / 30 days** | up to `plan_agency_daily_scripts` a day (default 150, always more than Creator), 60 sounds an hour |
 
-Price (`pro_price_xaf`, default **1,000 XAF**), length and limits are set in the **admin portal → Settings → Plans & payments**.
-The price is always read on the server; the browser never sends an amount.
+Curators and admins are not limited by the free plan (admins have no limit at all).
+Prices, plan length and limits are set in the **admin portal → Settings → Plans & payments**. The price is always read
+on the server; the browser never sends an amount. Paying again for the same plan adds days to its end date.
 
 ## Before you test (one time)
 
-1. **Database**: apply `supabase/migrations/20261128000001_payments_subscriptions.sql` (Supabase → SQL Editor → paste → Run). The last result row must be all `true`.
+1. **Database**: apply `supabase/migrations/20261128000001_payments_subscriptions.sql`, then `20261129000001_creator_agency_plans.sql` (Supabase → SQL Editor → paste → Run). The last result row of each must be all `true`.
 2. **Server secrets** in `.env.local` (local) and Vercel (live): `FAPSHI_API_USER`, `FAPSHI_API_KEY`, `FAPSHI_BASE_URL`,
    `FAPSHI_WEBHOOK_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`. None of them has `NEXT_PUBLIC_`.
 3. **Fapshi dashboard** (your sandbox service): webhook URL `https://creator-lab-beta.vercel.app/api/payments/webhook`
@@ -37,18 +37,19 @@ CreatorLab does not depend on them: the return page asks Fapshi for the status i
 ### 1. Free script, then the paywall
 1. Sign in as a new user, open **Creator Engine**. The line above the input says **"1 free script left today"**.
 2. Write a script. It works. The line now says **"Free script used · next one <day, time>"**.
-3. Try to write another. The **"You've used today's free script"** sheet opens with the exact unlock time and a countdown.
-   Your typed text is kept. Nothing is sent to Gemini.
+3. A large yellow banner says **"You've used today's free script"** with a **Subscribe** button. Trying to write another
+   opens the same message with the exact unlock time. Your typed text is kept. Nothing is sent to Gemini.
 
-### 2. Successful payment (MTN)
-1. In the sheet, tap **Subscribe · 1 000 XAF**. You land on Fapshi's test checkout.
-2. Choose MTN, enter **670000000**, confirm.
-3. You return to `/billing/return`. It shows "Confirming your payment", then **"You're on Pro"** with the end date.
-4. **Continue writing scripts**: generation works again. The plan line shows **PRO · Active until …**.
-5. `/billing` lists the payment as **Paid · MTN MoMo**.
+### 2. Successful payment (MTN), Creator plan
+1. Tap **Subscribe** → **Choose Creator**. The checkout page shows **5 000 XAF**, the Creator features and the test numbers.
+2. Tap **Copy** next to **670000000**, then **Pay 5 000 XAF**. On Fapshi's test page choose MTN, paste the number, confirm.
+3. You return to `/billing/return`. It shows "Confirming your payment", then **"You're on Creator"** with the end date.
+4. **Continue writing scripts**: generation works again. The plan line shows **CREATOR · 1/20 today · until …**.
+5. `/billing` lists the payment as **Creator · Paid · MTN MoMo**.
 
-### 3. Successful payment (Orange)
-Same as 2 with **690000000**. History shows **Orange Money**.
+### 3. Successful payment (Orange), Agency & Academy plan
+Same as 2, but choose **Agency & Academy** (checkout shows **50 000 XAF**) and use **690000000**. The plan line shows
+**AGENCY & ACADEMY · …/150 today**; history shows **Orange Money**.
 
 ### 4. Failed payment
 Use **670000001** (or **690000001**). The return page shows **"Payment didn't go through"** with **Try again**.
@@ -66,8 +67,9 @@ Pro switches on as soon as Fapshi confirms (webhook or the next check).
 Reload `/billing/return?ref=…` after a successful payment. It shows the same success screen and does **not** add days
 again (each payment can grant Pro only once).
 
-### 8. Renewal
-As a Pro user, open `/billing` → **Extend Pro** and pay again. The end date moves forward by `pro_days` days.
+### 8. Renewal and upgrade
+On `/billing`, **Extend Creator** (or **Extend Agency & Academy**) adds `pro_days` days. A Creator user can buy
+Agency & Academy at any time; the higher limits apply while it is active.
 
 ### Security checks (optional)
 - Another user cannot open your `/billing/return?ref=…` (they get "Payment not found").

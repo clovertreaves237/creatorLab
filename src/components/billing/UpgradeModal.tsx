@@ -2,16 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Clock, Check, Loader2, Lock, ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { X, Clock, ArrowLeft, ArrowRight, Lock } from "lucide-react";
+import type { PlanInfo } from "@/lib/payments/logic";
 import { PaymentMethods } from "./PaymentMarks";
-import { formatCountdown, formatUnlockTime, formatXaf, useCheckout } from "./useCheckout";
+import { PlanCards } from "./PlanCards";
+import { formatCountdown, formatUnlockTime, formatXaf } from "./useCheckout";
 
 export interface UpgradeInfo {
-  /** UPGRADE = opened by the user (still has free scripts); the other two = blocked by the server. */
+  /** UPGRADE = opened by the user; the other two = blocked by the server. */
   code: "UPGRADE" | "FREE_LIMIT_REACHED" | "DAILY_LIMIT_REACHED";
   nextAt: string | null;
-  price: { amount: number; days: number };
-  dailyLimit: number;
+  plans: PlanInfo[];
+  currentPlan: string | null;
   testMode: boolean;
   /** Free scripts per 24 hours (admin setting). */
   freePerDay?: number;
@@ -27,38 +30,45 @@ export function TestModeBadge({ className = "" }: { className?: string }) {
   );
 }
 
-/** Shown when a free account has used its script for the day (or a Pro account hit the daily cap). */
+/** Limit reached -> big Subscribe -> the two plans -> checkout page. */
 export function UpgradeModal({ info, onClose }: { info: UpgradeInfo | null; onClose: () => void }) {
-  const { startCheckout, starting, error } = useCheckout();
+  const router = useRouter();
+  const [step, setStep] = useState<"limit" | "plans">("limit");
   const [now, setNow] = useState(() => Date.now());
-  const subscribeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Agency users already have the biggest plan: nothing to upsell when they hit their cap.
+  const offer = (info?.plans || []).filter((p) => !(info?.currentPlan === "agency" && p.id === "creator"));
+  const canUpgrade = info ? !(info.code === "DAILY_LIMIT_REACHED" && info.currentPlan === "agency") && offer.length > 0 : false;
+  const cheapest = offer.length ? offer.reduce((a, b) => (a.amount <= b.amount ? a : b)) : null;
 
   useEffect(() => {
     if (!info) return;
+    setStep(info.code === "UPGRADE" ? "plans" : "limit");
     const t = setInterval(() => setNow(Date.now()), 30_000);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !starting && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    dialogRef.current?.focus(); // focus the dialog (screen readers announce it) without a ring on the button
+    dialogRef.current?.focus();
     return () => {
       clearInterval(t);
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [info, onClose, starting]);
+  }, [info, onClose]);
 
   if (!info || typeof document === "undefined") return null;
-  const isFree = info.code !== "DAILY_LIMIT_REACHED"; // free account: show the plan
-  const voluntary = info.code === "UPGRADE";
-  const days = info.price.days;
+  const isFree = !info.currentPlan || info.currentPlan === "free";
+  const wide = step === "plans";
+
+  const choose = (p: PlanInfo) => {
+    onClose();
+    router.push(`/billing/checkout?plan=${p.id}`);
+  };
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/40 sm:items-center sm:p-4"
-      onClick={() => !starting && onClose()}
-    >
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/50 sm:items-center sm:p-4" onClick={onClose}>
       <div
         ref={dialogRef}
         tabIndex={-1}
@@ -66,133 +76,102 @@ export function UpgradeModal({ info, onClose }: { info: UpgradeInfo | null; onCl
         aria-modal="true"
         aria-labelledby="upgrade-title"
         onClick={(e) => e.stopPropagation()}
-        className="relative max-h-[92vh] w-full min-w-0 overflow-y-auto overscroll-contain outline-none rounded-t-3xl border-2 border-b-0 border-ink bg-white px-5 pb-6 pt-3 sm:max-w-md sm:rounded-3xl sm:border-b-2 sm:p-7"
+        className={`relative max-h-[94vh] w-full min-w-0 overflow-y-auto overscroll-contain rounded-t-3xl border-2 border-b-0 border-ink bg-white px-5 pb-6 pt-3 outline-none sm:rounded-3xl sm:border-b-2 sm:p-8 ${wide ? "sm:max-w-3xl" : "sm:max-w-lg"}`}
       >
-        {/* grab handle (mobile sheet) */}
         <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-line sm:hidden" aria-hidden />
-
         <button
           type="button"
           onClick={onClose}
-          disabled={starting}
-          className="absolute right-3 top-3 rounded-xl p-2 text-pencil transition-colors hover:bg-paper-deep hover:text-ink disabled:opacity-40"
+          className="absolute right-3 top-3 rounded-xl p-2 text-pencil transition-colors hover:bg-paper-deep hover:text-ink"
           aria-label="Close"
         >
           <X className="h-5 w-5" />
         </button>
 
-        <div className="pr-8">
-          <span className="sk-pill text-[11px]">{voluntary ? "CreatorLab Pro" : isFree ? "Free plan" : "Daily limit"}</span>
-          <h2 id="upgrade-title" className="mt-3 text-[26px] font-extrabold leading-[1.1] tracking-tight text-ink sm:text-3xl">
-            {voluntary ? (
-              <>
-                Keep writing with <span className="hl-yellow">Pro</span>
-              </>
-            ) : isFree ? (
-              <>
-                You&apos;ve used today&apos;s <span className="hl-yellow">free script</span>
-              </>
-            ) : (
-              <>
-                You&apos;ve hit today&apos;s <span className="hl-yellow">limit</span>
-              </>
-            )}
-          </h2>
-        </div>
-
-        {info.nextAt && !voluntary && (
-          <div className="mt-4 flex items-start gap-3 rounded-2xl border-2 border-ink bg-paper px-4 py-3">
-            <Clock className="mt-0.5 h-5 w-5 shrink-0 text-ink" />
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-ink">
-                {isFree ? "Next free script" : "Limit resets"}: {formatUnlockTime(info.nextAt)}
-              </p>
-              <p className="text-xs text-pencil">in {formatCountdown(info.nextAt, now)}</p>
-            </div>
-          </div>
-        )}
-
-        {isFree ? (
+        {step === "limit" ? (
           <>
-            <p className="mt-5 text-sm text-pencil">
-              {voluntary
-                ? `Free accounts get ${info.freePerDay === undefined || info.freePerDay === 1 ? "one script" : `${info.freePerDay} scripts`} a day. Subscribe to keep writing whenever you need to.`
-                : "Don’t want to wait? Subscribe and keep writing scripts right now."}
-            </p>
-
-            <div className="mt-3 rounded-2xl border-2 border-ink p-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <p className="font-serif text-xl italic text-ink">CreatorLab Pro</p>
-                <p className="text-ink">
-                  <span className="text-2xl font-extrabold tracking-tight">{formatXaf(info.price.amount)}</span>
-                  <span className="text-sm text-pencil"> / {days} days</span>
-                </p>
-              </div>
-              <ul className="mt-3 space-y-2 text-sm text-ink">
-                <li className="flex gap-2">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-score" strokeWidth={3} />
-                  <span>
-                    Keep generating scripts{info.dailyLimit > 0 ? `, up to ${info.dailyLimit} a day` : ""}
-                  </span>
-                </li>
-                <li className="flex gap-2">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-score" strokeWidth={3} />
-                  <span>Active for {days} days from your payment</span>
-                </li>
-                <li className="flex gap-2">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-score" strokeWidth={3} />
-                  <span>Pay once. No automatic renewal</span>
-                </li>
-              </ul>
-            </div>
-
-            <p className="mb-2 mt-5 text-xs font-bold uppercase tracking-wide text-pencil">Pay with</p>
-            <PaymentMethods />
-
-            {error && (
-              <p role="alert" className="mt-4 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-                {error}
-              </p>
-            )}
-
-            <button ref={subscribeRef} type="button" onClick={startCheckout} disabled={starting} className="sk-btn-ink mt-5 w-full justify-center py-3.5 text-base">
-              {starting ? (
+            <span className="sk-pill text-[11px]">{isFree ? "Free plan" : "Daily limit"}</span>
+            <h2 id="upgrade-title" className="mt-4 pr-6 text-[32px] font-extrabold leading-[1.05] tracking-tight text-ink sm:text-[40px]">
+              {isFree ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Opening secure payment…
+                  You&apos;ve used today&apos;s <span className="hl-yellow">free script</span>
                 </>
               ) : (
                 <>
-                  Subscribe · {formatXaf(info.price.amount)} <ArrowRight className="h-4 w-4" />
+                  You&apos;ve hit today&apos;s <span className="hl-yellow">limit</span>
                 </>
               )}
-            </button>
-            <button type="button" onClick={onClose} disabled={starting} className="sk-btn-ghost mt-2 w-full justify-center py-2.5 text-sm">
-              Maybe later
-            </button>
+            </h2>
 
-            <div className="mt-4 flex flex-col items-center gap-2 text-center">
-              <p className="flex items-center gap-1.5 text-[11px] text-pencil">
-                <Lock className="h-3 w-3" /> Secure payment by Fapshi. You&apos;ll confirm on your phone.
-              </p>
-              {info.testMode && (
-                <>
-                  <TestModeBadge />
-                  <p className="text-[11px] leading-relaxed text-pencil">
-                    On the Fapshi test page use <span className="font-bold text-ink">670000000</span> (MTN) or{" "}
-                    <span className="font-bold text-ink">690000000</span> (Orange) for a successful payment.
+            {info.nextAt && (
+              <div className="mt-5 flex items-start gap-3 rounded-2xl border-2 border-ink bg-paper px-4 py-3.5">
+                <Clock className="mt-0.5 h-5 w-5 shrink-0 text-ink" />
+                <div className="min-w-0">
+                  <p className="text-base font-bold text-ink">
+                    {isFree ? "Next free script" : "Limit resets"}: {formatUnlockTime(info.nextAt)}
                   </p>
-                </>
-              )}
-            </div>
+                  <p className="text-sm text-pencil">in {formatCountdown(info.nextAt, now)}</p>
+                </div>
+              </div>
+            )}
+
+            {canUpgrade ? (
+              <>
+                <p className="mt-6 text-lg font-semibold leading-snug text-ink">
+                  {isFree ? "Subscribe to keep generating scripts right now." : "Need more scripts? Move up to Agency & Academy."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setStep("plans")}
+                  className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-xl bg-ink px-6 py-5 text-xl font-extrabold text-white transition-colors hover:bg-ink-soft focus:outline-none focus-visible:ring-4 focus-visible:ring-accent/40"
+                >
+                  {isFree ? "Subscribe for more scripts" : "See Agency & Academy"} <ArrowRight className="h-6 w-6" />
+                </button>
+                {cheapest && (
+                  <p className="mt-3 text-center text-sm text-pencil">
+                    From <span className="font-bold text-ink">{formatXaf(cheapest.amount)}</span> for {cheapest.days} days · MTN MoMo or Orange Money
+                  </p>
+                )}
+                <button type="button" onClick={onClose} className="sk-btn-ghost mt-2 w-full justify-center py-2.5 text-sm">
+                  Maybe later
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="mt-6 text-base text-pencil">Your plan&apos;s daily limit keeps the service fast for everyone. Your scripts and history are safe.</p>
+                <button type="button" onClick={onClose} className="sk-btn-ink mt-5 w-full justify-center py-3.5 text-base">
+                  Got it
+                </button>
+              </>
+            )}
           </>
         ) : (
           <>
-            <p className="mt-5 text-sm text-pencil">
-              Pro includes up to {info.dailyLimit} scripts a day to keep the service fast for everyone. Your scripts and history are safe.
+            <div className="flex items-center gap-2 pr-8">
+              {info.code !== "UPGRADE" && (
+                <button type="button" onClick={() => setStep("limit")} className="rounded-lg p-1.5 text-pencil hover:bg-paper-deep hover:text-ink" aria-label="Back">
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+              )}
+              <span className="sk-pill text-[11px]">Subscribe</span>
+            </div>
+            <h2 id="upgrade-title" className="mt-4 text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-4xl">
+              Choose your <span className="hl-yellow">plan</span>
+            </h2>
+            <p className="mt-2 text-sm text-pencil">
+              {info.freePerDay === undefined || info.freePerDay === 1 ? "Free accounts get one script a day." : `Free accounts get ${info.freePerDay} scripts a day.`}{" "}
+              Pay once, no automatic renewal.
             </p>
-            <button ref={subscribeRef} type="button" onClick={onClose} className="sk-btn-ink mt-5 w-full justify-center py-3">
-              Got it
-            </button>
+            <div className="mt-7 sm:mt-8">
+              <PlanCards plans={offer} currentPlan={info.currentPlan} onChoose={choose} compact />
+            </div>
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <PaymentMethods compact className="w-full max-w-xs" />
+              <p className="flex items-center gap-1.5 text-center text-xs text-pencil">
+                <Lock className="h-3 w-3" /> Secure payment by Fapshi. You&apos;ll confirm on your phone.
+              </p>
+              {info.testMode && <TestModeBadge />}
+            </div>
           </>
         )}
       </div>

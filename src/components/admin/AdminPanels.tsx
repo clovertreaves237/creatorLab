@@ -533,7 +533,7 @@ export function SettingsPanel() {
   const [limit, setLimit] = useState<string>("");
   const [invites, setInvites] = useState<any[]>([]);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const [billing, setBilling] = useState({ free_scripts_per_day: "", pro_price_xaf: "", pro_days: "" });
+  const [billing, setBilling] = useState({ free_scripts_per_day: "", plan_creator_price_xaf: "", plan_agency_price_xaf: "", plan_agency_daily_scripts: "", pro_days: "" });
   const [billingMessage, setBillingMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = () =>
@@ -543,7 +543,9 @@ export function SettingsPanel() {
         setLimit(String(json.settings?.daily_script_limit ?? 20));
         setBilling({
           free_scripts_per_day: String(json.settings?.free_scripts_per_day ?? 1),
-          pro_price_xaf: String(json.settings?.pro_price_xaf ?? 1000),
+          plan_creator_price_xaf: String(json.settings?.plan_creator_price_xaf ?? 5000),
+          plan_agency_price_xaf: String(json.settings?.plan_agency_price_xaf ?? 50000),
+          plan_agency_daily_scripts: String(json.settings?.plan_agency_daily_scripts ?? 150),
           pro_days: String(json.settings?.pro_days ?? 30),
         });
         setInvites(json.invitations || []);
@@ -552,7 +554,17 @@ export function SettingsPanel() {
 
   const saveBilling = async () => {
     setBillingMessage(null);
-    for (const key of ["free_scripts_per_day", "pro_price_xaf", "pro_days"] as const) {
+    const daily = Number(limit);
+    const agencyDaily = Number(billing.plan_agency_daily_scripts);
+    if (Number(billing.plan_agency_price_xaf) <= Number(billing.plan_creator_price_xaf)) {
+      setBillingMessage({ ok: false, text: "The Agency & Academy price must be higher than the Creator price." });
+      return;
+    }
+    if (daily > 0 && agencyDaily !== 0 && agencyDaily <= daily) {
+      setBillingMessage({ ok: false, text: `Agency & Academy must allow more scripts a day than Creator (${daily}).` });
+      return;
+    }
+    for (const key of ["free_scripts_per_day", "plan_creator_price_xaf", "plan_agency_price_xaf", "plan_agency_daily_scripts", "pro_days"] as const) {
       const res = await fetch("/api/admin/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -560,7 +572,8 @@ export function SettingsPanel() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        const label = key === "pro_price_xaf" ? "Price (100 XAF or more)" : key === "pro_days" ? "Days (1 to 366)" : "Free scripts (0 to 100)";
+        const label =
+          key === "pro_days" ? "Plan length (1 to 366 days)" : key === "free_scripts_per_day" ? "Free scripts (0 to 100)" : key === "plan_agency_daily_scripts" ? "Agency scripts a day (0 to 5000)" : "Price (100 XAF or more)";
         setBillingMessage({ ok: false, text: `${label}: ${json.error || "could not save."}` });
         return;
       }
@@ -599,20 +612,28 @@ export function SettingsPanel() {
       <section className="sk-card space-y-4 p-6">
         <h3 className="font-bold text-ink">Plans &amp; payments</h3>
         <p className="text-sm text-pencil">
-          Free accounts get a number of scripts per rolling 24 hours. Pro is paid once through Fapshi (MTN Mobile Money or
-          Orange Money) and lasts the number of days below. Pro users follow the daily script limit.
+          Free accounts get a number of scripts per rolling 24 hours. Plans are paid once through Fapshi (MTN Mobile Money or
+          Orange Money) and last the number of days below. Creator follows the daily script limit; Agency &amp; Academy gets its own, higher limit.
         </p>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs font-bold text-ink">
             Free scripts / 24h
             <input type="number" min={0} max={100} className="sk-input mt-1 w-full" value={billing.free_scripts_per_day} onChange={(e) => setBilling((b) => ({ ...b, free_scripts_per_day: e.target.value }))} />
           </label>
           <label className="text-xs font-bold text-ink">
-            Pro price (XAF)
-            <input type="number" min={100} step={50} className="sk-input mt-1 w-full" value={billing.pro_price_xaf} onChange={(e) => setBilling((b) => ({ ...b, pro_price_xaf: e.target.value }))} />
+            Creator price (XAF)
+            <input type="number" min={100} step={500} className="sk-input mt-1 w-full" value={billing.plan_creator_price_xaf} onChange={(e) => setBilling((b) => ({ ...b, plan_creator_price_xaf: e.target.value }))} />
           </label>
           <label className="text-xs font-bold text-ink">
-            Pro length (days)
+            Agency &amp; Academy price (XAF)
+            <input type="number" min={100} step={500} className="sk-input mt-1 w-full" value={billing.plan_agency_price_xaf} onChange={(e) => setBilling((b) => ({ ...b, plan_agency_price_xaf: e.target.value }))} />
+          </label>
+          <label className="text-xs font-bold text-ink">
+            Agency &amp; Academy scripts / day
+            <input type="number" min={0} max={5000} className="sk-input mt-1 w-full" value={billing.plan_agency_daily_scripts} onChange={(e) => setBilling((b) => ({ ...b, plan_agency_daily_scripts: e.target.value }))} />
+          </label>
+          <label className="text-xs font-bold text-ink">
+            Plan length (days)
             <input type="number" min={1} max={366} className="sk-input mt-1 w-full" value={billing.pro_days} onChange={(e) => setBilling((b) => ({ ...b, pro_days: e.target.value }))} />
           </label>
         </div>

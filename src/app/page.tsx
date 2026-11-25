@@ -15,6 +15,17 @@ import {
 } from "@/components/ui/HandDrawn";
 import { AuthGateModal } from "@/components/landing/AuthGateModal";
 import { ALLOWED_NICHES } from "@/lib/constants/niches";
+import { PlanCards } from "@/components/billing/PlanCards";
+import { parseBillingSettings, planCatalog, type PlanInfo } from "@/lib/payments/logic";
+import { Check } from "lucide-react";
+
+const CheckMark = () => <Check className="mt-0.5 h-4 w-4 shrink-0 text-score" strokeWidth={3} />;
+const DEFAULT_SETTINGS = parseBillingSettings([]);
+const DEFAULT_PRICING = {
+  freeScriptsPerDay: DEFAULT_SETTINGS.freeScriptsPerDay,
+  freeSoundsPerHour: DEFAULT_SETTINGS.freeSoundsPerHour,
+  plans: planCatalog(DEFAULT_SETTINGS) as PlanInfo[],
+};
 
 const FAQ = [
   {
@@ -48,6 +59,15 @@ export default function HomePage() {
   const [authGateOpen, setAuthGateOpen] = useState(false);
   const [authGateFeature, setAuthGateFeature] = useState("access creator intelligence");
   const [faqOpenIndex, setFaqOpenIndex] = useState<number | null>(null);
+
+  // Pricing: defaults render immediately; live prices (admin settings) replace them when loaded.
+  const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  useEffect(() => {
+    fetch("/api/plans")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => p?.plans?.length && setPricing(p))
+      .catch(() => {});
+  }, []);
 
   // Verified users skip the landing page.
   useEffect(() => {
@@ -191,44 +211,37 @@ export default function HomePage() {
       </section>
 
       {/* ── 6. Access tiers ─────────────────────────────────── */}
-      <section className="bg-paper px-4 sm:px-8 py-24 sm:py-28">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="text-center text-4xl sm:text-6xl mb-16 sm:mb-20">
-            Simple <Highlight color="mint">Access.</Highlight>
+      <section id="pricing" className="bg-paper px-4 sm:px-8 py-24 sm:py-28 scroll-mt-20">
+        <div className="mx-auto max-w-6xl">
+          <h2 className="text-center text-4xl sm:text-6xl">
+            Simple <Highlight color="mint">pricing.</Highlight>
           </h2>
-          <div className="grid gap-10 md:grid-cols-2 items-stretch">
-            <div className="border-2 border-ink bg-white px-10 py-14 text-center flex flex-col">
-              <h3 className="text-3xl font-bold">Visitor</h3>
-              <p className="mt-8 text-6xl font-black">Look</p>
-              <ul className="mt-10 space-y-5 text-lg text-pencil flex-1">
-                <li>This landing page</li>
-                <li>Sign up with email</li>
-                <li>Sign in with Google</li>
+          <p className="mx-auto mt-5 max-w-2xl text-center text-lg text-pencil">
+            Start free. When you need more scripts, pay once with MTN Mobile Money or Orange Money. No automatic renewal.
+          </p>
+          <div className="mt-14 grid gap-6 sm:mt-16 lg:grid-cols-3 lg:items-stretch">
+            <div className="flex flex-col rounded-2xl border-2 border-ink bg-white p-6 sm:p-8">
+              <p className="font-serif text-2xl italic">Free</p>
+              <p className="mt-1 text-sm text-pencil sm:min-h-[2.5rem]">To try CreatorLab</p>
+              <p className="mt-4 text-4xl font-extrabold tracking-tight">0 XAF</p>
+              <ul className="mt-5 flex-1 space-y-2.5 text-[15px]">
+                {[
+                  `${pricing.freeScriptsPerDay === 1 ? "1 script" : `${pricing.freeScriptsPerDay} scripts`} every 24 hours`,
+                  `Up to ${pricing.freeSoundsPerHour} background sounds an hour`,
+                  "All live niches and curated creators",
+                  "7-day topic search and “Why this worked”",
+                ].map((f) => (
+                  <li key={f} className="flex gap-2.5">
+                    <CheckMark />
+                    <span>{f}</span>
+                  </li>
+                ))}
               </ul>
-              <Link href="/signup" className="sk-btn mt-12 w-full justify-start px-9 py-4 text-lg">
-                Get Started
+              <Link href="/signup" className="sk-btn mt-6 w-full justify-center py-3.5 text-base">
+                Create free account
               </Link>
             </div>
-
-            <div className="relative bg-ink text-white px-10 py-14 text-center flex flex-col shadow-[10px_0_0_#FDE047]">
-              <span className="absolute -top-5 right-6 rotate-[8deg] rounded-full border-2 border-ink bg-white px-6 py-2 text-base font-black uppercase tracking-wide text-ink">
-                Free account
-              </span>
-              <h3 className="text-3xl font-bold text-white">Creator</h3>
-              <p className="mt-8 text-6xl font-black">Free</p>
-              <ul className="mt-10 space-y-5 text-lg text-white/80 flex-1">
-                <li>Curated creators in every live niche</li>
-                <li>7-day topic search</li>
-                <li>“Why this worked” breakdowns</li>
-                <li>Script generation and editing</li>
-              </ul>
-              <Link
-                href="/signup"
-                className="mt-12 block w-full bg-white py-5 text-lg font-bold text-ink hover:bg-hl-yellow transition-colors"
-              >
-                Create Free Account
-              </Link>
-            </div>
+            <PlanCards plans={pricing.plans} gridClassName="contents" ctaPrefix="Get" />
           </div>
         </div>
       </section>

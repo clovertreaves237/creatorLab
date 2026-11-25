@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 
-/** Starts a Fapshi checkout for the Pro pass and sends the browser to Fapshi's secure payment page. */
+/** Starts a Fapshi checkout for a plan and sends the browser to Fapshi's secure payment page. */
 export function useCheckout() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const startCheckout = async () => {
+  const startCheckout = async (product: "creator_month" | "agency_month") => {
     if (starting) return;
     setStarting(true);
     setError(null);
@@ -15,7 +15,7 @@ export function useCheckout() {
       const res = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product: "pro_pass" }), // the price is decided on the server
+        body: JSON.stringify({ product }), // the price is decided on the server
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || typeof json.url !== "string") throw new Error(json.error || "The payment page could not be opened.");

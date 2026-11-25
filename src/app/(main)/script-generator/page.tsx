@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ALLOWED_NICHES, NicheId, getNicheById, isValidNiche } from "@/lib/constants/niches";
-import { PenLine, Copy, Check, Clock, FileText, AlertTriangle, Download, ShieldCheck, Search, ChevronRight, Loader2, CheckCircle2, Paperclip, Trash2, Eye, History, ChevronDown, ChevronUp, Radio, Plus, ExternalLink, Edit3, RotateCcw, Square } from "lucide-react";
+import { PenLine, Copy, Check, Clock, FileText, AlertTriangle, Download, ShieldCheck, Search, ChevronRight, Loader2, CheckCircle2, Paperclip, Trash2, Eye, History, ChevronDown, ChevronUp, Radio, Plus, ExternalLink, Edit3, RotateCcw, Square, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { MobiusLoader } from "@/components/ui/MobiusLoader";
 import { LogoBadge } from "@/components/brand/Logo";
@@ -113,8 +113,8 @@ function ScriptGeneratorContent() {
     setUpgradeInfo({
       code,
       nextAt,
-      price: b?.price ? { amount: b.price.amount, days: b.price.days } : { amount: 1000, days: 30 },
-      dailyLimit: b?.dailyLimit ?? 20,
+      plans: b?.plans || [],
+      currentPlan: b?.plan ?? "free",
       testMode: b?.testMode ?? true,
       freePerDay: b?.free?.limit,
     });
@@ -1069,31 +1069,49 @@ function ScriptGeneratorContent() {
           {/* BOTTOM DOCKED INPUT CAPSULE (chat controls) */}
           {/* ============================================================ */}
           <div className="p-2 sm:p-3 bg-white border-t border-line shrink-0">
-            {/* Plan line: free scripts left / next free script / Pro end date */}
-            {billing && billing.plan !== "staff" && (
-              <div className="max-w-4xl mx-auto mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-[11px] sm:text-xs">
-                {billing.plan === "pro" ? (
+            {/* Out of free scripts: big, impossible-to-miss banner with a real Subscribe button */}
+            {billing && blockedNow && billing.plan === "free" && (
+              <div className="max-w-4xl mx-auto mb-3 rounded-2xl border-2 border-ink bg-hl-yellow p-4 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-5">
+                <div className="min-w-0">
+                  <p className="text-lg font-extrabold leading-tight text-ink sm:text-xl">You&apos;ve used today&apos;s free script</p>
+                  <p className="mt-1 flex items-center gap-1.5 text-sm text-ink/80">
+                    <Clock className="h-4 w-4 shrink-0" />
+                    Next free script {blockedNow.nextAt ? formatUnlockTime(blockedNow.nextAt) : "tomorrow"}. Or subscribe to keep writing now.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openUpgrade(blockedNow.code, blockedNow.nextAt)}
+                  className="mt-3 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-ink px-6 py-3.5 text-base font-extrabold text-white transition-colors hover:bg-ink-soft sm:mt-0 sm:w-auto sm:text-lg"
+                >
+                  Subscribe <ArrowRight className="h-5 w-5" />
+                </button>
+              </div>
+            )}
+
+            {/* Plan line: free scripts left / paid plan end date */}
+            {billing && billing.plan !== "staff" && !(blockedNow && billing.plan === "free") && (
+              <div className="max-w-4xl mx-auto mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-xs sm:text-sm">
+                {billing.plan === "creator" || billing.plan === "agency" ? (
                   <span className="inline-flex items-center gap-1.5 text-pencil">
-                    <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">PRO</span>
-                    Active until {new Date(billing.proUntil).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
-                  </span>
-                ) : blockedNow ? (
-                  <span className="inline-flex items-center gap-1.5 text-pencil">
-                    <Clock className="h-3.5 w-3.5 shrink-0 text-ink" />
-                    Free script used · next one {blockedNow.nextAt ? formatUnlockTime(blockedNow.nextAt) : "tomorrow"}
+                    <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                      {billing.plan === "agency" ? "Agency & Academy" : "Creator"}
+                    </span>
+                    {billing.usedToday}/{billing.dailyLimit > 0 ? billing.dailyLimit : "∞"} today · until{" "}
+                    {billing.planUntil ? new Date(billing.planUntil).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : ""}
                   </span>
                 ) : (
                   <span className="text-pencil">
                     <span className="font-bold text-ink">{billing.free?.remaining ?? 0}</span> free script{billing.free?.remaining === 1 ? "" : "s"} left today
                   </span>
                 )}
-                {billing.plan === "free" && (
+                {billing.plan !== "agency" && (
                   <button
                     type="button"
-                    onClick={() => (blockedNow ? openUpgrade(blockedNow.code, blockedNow.nextAt) : openUpgrade("UPGRADE", null))}
-                    className="font-bold text-ink underline decoration-2 underline-offset-4 hover:text-accent"
+                    onClick={() => openUpgrade("UPGRADE", null)}
+                    className="rounded-lg border-2 border-ink px-3 py-1 font-bold text-ink transition-colors hover:bg-ink hover:text-white"
                   >
-                    Subscribe for more
+                    {billing.plan === "creator" ? "Upgrade" : "Subscribe"}
                   </button>
                 )}
               </div>

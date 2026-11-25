@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/roles";
+import { getPlan } from "@/lib/payments/server";
 import { getNicheById, isLiveNiche } from "@/lib/constants/niches";
 import { composeSoundPlan, SoundComposeError } from "@/lib/sound/compose";
 
@@ -9,9 +10,8 @@ import { composeSoundPlan, SoundComposeError } from "@/lib/sound/compose";
  * Returns a composition plan (JSON); the browser renders it to audio with Tone.js. No audio is stored.
  */
 
-// Simple per-user limit to protect the Gemini quota (per server instance)
+// Per-user hourly limit by plan (Free / Creator / Agency & Academy) to protect the Gemini quota (per server instance)
 const WINDOW_MS = 60 * 60 * 1000;
-const MAX_PER_WINDOW = 20;
 const recent = new Map<string, number[]>();
 
 export async function POST(request: NextRequest) {
@@ -46,7 +46,14 @@ export async function POST(request: NextRequest) {
 
   const now = Date.now();
   const times = (recent.get(userId) || []).filter((t) => now - t < WINDOW_MS);
-  if (times.length >= MAX_PER_WINDOW) {
+  const { plan, settings } = await getPlan(userId, gate.account.role).catch(() => ({ plan: "free" as const, settings: null }));
+  const maxPerWindow =
+    plan === "agency" || plan === "staff"
+      ? settings?.agencySoundsPerHour ?? 60
+      : plan === "creator"
+        ? settings?.creatorSoundsPerHour ?? 20
+        : settings?.freeSoundsPerHour ?? 20;
+  if (times.length >= maxPerWindow) {
     return NextResponse.json({ error: "You have made a lot of sounds this hour. Try again a little later." }, { status: 429 });
   }
   times.push(now);

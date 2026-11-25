@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/roles";
 import { createServiceClient } from "@/lib/supabase/service";
 import { FapshiError, initiatePay, isFapshiTestMode } from "@/lib/payments/fapshi";
 import { loadBillingSettings } from "@/lib/payments/server";
-import { priceFor } from "@/lib/payments/logic";
+import { planCatalog, priceFor } from "@/lib/payments/logic";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ function appBaseUrl(request: NextRequest): string {
 }
 
 /**
- * POST /api/payments/checkout { product: "pro_pass" }
+ * POST /api/payments/checkout { product: "creator_month" | "agency_month" }
  * Creates a pending payment (server-side price), asks Fapshi for a hosted payment link and returns it.
  */
 export async function POST(request: NextRequest) {
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       externalId,
       email: account.email || null,
       redirectUrl: `${appBaseUrl(request)}/billing/return?ref=${externalId}`,
-      message: `CreatorLab Pro for ${price.days} days`,
+      message: `CreatorLab ${planCatalog(settings).find((p) => p.id === price.plan)!.name} plan, ${price.days} days`,
     });
 
     const { error: saveError } = await db

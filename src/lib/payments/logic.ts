@@ -6,21 +6,42 @@
 export type PaymentStatus = "pending" | "successful" | "failed" | "expired";
 export type FapshiStatus = "CREATED" | "PENDING" | "SUCCESSFUL" | "FAILED" | "EXPIRED";
 
-export const PRO_PRODUCT = "pro_pass" as const;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 /* ------------------------------------------------------------------------------------ */
-/* Settings (server-side price list, from app_settings)                                 */
+/* Plans and the server-side price list (app_settings, admin-editable)                  */
 /* ------------------------------------------------------------------------------------ */
+
+export type PaidPlan = "creator" | "agency";
+export type PlanId = "free" | PaidPlan;
+
+/** What is sold. The amount always comes from settings on the server, never from the browser. */
+export const PRODUCTS = { creator_month: "creator", agency_month: "agency" } as const;
+export type ProductId = keyof typeof PRODUCTS;
 
 export interface BillingSettings {
   freeScriptsPerDay: number; // free accounts, rolling 24 hours
-  proPriceXaf: number; // what Fapshi charges for the Pro pass
-  proDays: number; // how long one payment keeps Pro active
-  dailyScriptLimit: number; // cap for Pro users per calendar day (0 = no cap)
+  planDays: number; // how long one payment keeps a plan active
+  creatorPriceXaf: number;
+  agencyPriceXaf: number;
+  dailyScriptLimit: number; // Creator plan (and staff) per calendar day (0 = no cap)
+  agencyDailyScripts: number; // Agency & Academy plan per calendar day (0 = no cap)
+  freeSoundsPerHour: number;
+  creatorSoundsPerHour: number;
+  agencySoundsPerHour: number;
 }
 
-export const DEFAULT_BILLING: BillingSettings = { freeScriptsPerDay: 1, proPriceXaf: 1000, proDays: 30, dailyScriptLimit: 20 };
+export const DEFAULT_BILLING: BillingSettings = {
+  freeScriptsPerDay: 1,
+  planDays: 30,
+  creatorPriceXaf: 5000,
+  agencyPriceXaf: 50000,
+  dailyScriptLimit: 20,
+  agencyDailyScripts: 150,
+  freeSoundsPerHour: 20,
+  creatorSoundsPerHour: 20,
+  agencySoundsPerHour: 60,
+};
 
 function intInRange(v: unknown, min: number, max: number): number | null {
   const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
@@ -30,18 +51,103 @@ function intInRange(v: unknown, min: number, max: number): number | null {
 /** Builds the price list from app_settings rows. Anything missing or invalid falls back to the defaults. */
 export function parseBillingSettings(rows: { key: string; value: unknown }[] | null | undefined): BillingSettings {
   const map = new Map((rows || []).map((r) => [r.key, r.value]));
-  return {
-    freeScriptsPerDay: intInRange(map.get("free_scripts_per_day"), 0, 100) ?? DEFAULT_BILLING.freeScriptsPerDay,
-    proPriceXaf: intInRange(map.get("pro_price_xaf"), 100, 1_000_000) ?? DEFAULT_BILLING.proPriceXaf,
-    proDays: intInRange(map.get("pro_days"), 1, 366) ?? DEFAULT_BILLING.proDays,
-    dailyScriptLimit: intInRange(map.get("daily_script_limit"), 0, 1000) ?? DEFAULT_BILLING.dailyScriptLimit,
+  const d = DEFAULT_BILLING;
+  const s: BillingSettings = {
+    freeScriptsPerDay: intInRange(map.get("free_scripts_per_day"), 0, 100) ?? d.freeScriptsPerDay,
+    planDays: intInRange(map.get("pro_days"), 1, 366) ?? d.planDays,
+    creatorPriceXaf: intInRange(map.get("plan_creator_price_xaf"), 100, 5_000_000) ?? d.creatorPriceXaf,
+    agencyPriceXaf: intInRange(map.get("plan_agency_price_xaf"), 100, 5_000_000) ?? d.agencyPriceXaf,
+    dailyScriptLimit: intInRange(map.get("daily_script_limit"), 0, 1000) ?? d.dailyScriptLimit,
+    agencyDailyScripts: intInRange(map.get("plan_agency_daily_scripts"), 0, 5000) ?? d.agencyDailyScripts,
+    freeSoundsPerHour: d.freeSoundsPerHour,
+    creatorSoundsPerHour: d.creatorSoundsPerHour,
+    agencySoundsPerHour: d.agencySoundsPerHour,
   };
+  // The bigger plan must always give more: never fewer scripts than Creator.
+  if (s.dailyScriptLimit > 0 && (s.agencyDailyScripts === 0 ? false : s.agencyDailyScripts <= s.dailyScriptLimit)) {
+    s.agencyDailyScripts = s.dailyScriptLimit * 5;
+  }
+  if (s.dailyScriptLimit === 0) s.agencyDailyScripts = 0; // both unlimited
+  return s;
 }
 
-/** The only thing users can buy. The amount always comes from here (server), never from the browser. */
-export function priceFor(product: unknown, settings: BillingSettings): { product: typeof PRO_PRODUCT; amount: number; days: number } | null {
-  if (product !== PRO_PRODUCT) return null;
-  return { product: PRO_PRODUCT, amount: settings.proPriceXaf, days: settings.proDays };
+export interface PlanInfo {
+  id: PaidPlan;
+  product: ProductId;
+  name: string;
+  audience: string;
+  amount: number;
+  currency: "XAF";
+  days: number;
+  scriptsPerDay: number; // 0 = no cap
+  soundsPerHour: number;
+  features: string[];
+}
+
+const scriptsLine = (n: number) => (n > 0 ? `Up to ${n} scripts a day` : "Unlimited scripts");
+
+/** The two paid plans, built from the server-side settings. */
+export function planCatalog(s: BillingSettings): PlanInfo[] {
+  return [
+    {
+      id: "creator",
+      product: "creator_month",
+      name: "Creator",
+      audience: "For individual creators who post often",
+      amount: s.creatorPriceXaf,
+      currency: "XAF",
+      days: s.planDays,
+      scriptsPerDay: s.dailyScriptLimit,
+      soundsPerHour: s.creatorSoundsPerHour,
+      features: [
+        scriptsLine(s.dailyScriptLimit),
+        `Up to ${s.creatorSoundsPerHour} background sounds an hour`,
+        "All live niches and curated creators",
+        "7-day topic search and “Why this worked”",
+        "Permanent, private script history",
+      ],
+    },
+    {
+      id: "agency",
+      product: "agency_month",
+      name: "Agency & Academy",
+      audience: "For agencies, academies and schools producing for many accounts",
+      amount: s.agencyPriceXaf,
+      currency: "XAF",
+      days: s.planDays,
+      scriptsPerDay: s.agencyDailyScripts,
+      soundsPerHour: s.agencySoundsPerHour,
+      features: [
+        s.agencyDailyScripts > 0 && s.dailyScriptLimit > 0
+          ? `Up to ${s.agencyDailyScripts} scripts a day (${Math.round(s.agencyDailyScripts / s.dailyScriptLimit)}x Creator)`
+          : scriptsLine(s.agencyDailyScripts),
+        `Up to ${s.agencySoundsPerHour} background sounds an hour`,
+        "Everything in Creator",
+        "All live niches and curated creators",
+        "Permanent, private script history",
+      ],
+    },
+  ];
+}
+
+/** Price lookup for checkout. Unknown products are refused. */
+export function priceFor(product: unknown, settings: BillingSettings): { product: ProductId; plan: PaidPlan; amount: number; days: number } | null {
+  // Own keys only: "toString" / "__proto__" must not count as products.
+  if (typeof product !== "string" || !Object.prototype.hasOwnProperty.call(PRODUCTS, product)) return null;
+  const plan = planCatalog(settings).find((p) => p.product === product);
+  if (!plan) return null;
+  return { product: plan.product, plan: plan.id, amount: plan.amount, days: plan.days };
+}
+
+/** Which paid plan is active, from the subscription end dates. Agency wins while both are active. */
+export function activePlan(sub: { pro_until?: string | null; agency_until?: string | null } | null | undefined, now: Date = new Date()): {
+  plan: PlanId;
+  until: string | null;
+} {
+  const t = now.getTime();
+  if (sub?.agency_until && new Date(sub.agency_until).getTime() > t) return { plan: "agency", until: String(sub.agency_until) };
+  if (sub?.pro_until && new Date(sub.pro_until).getTime() > t) return { plan: "creator", until: String(sub.pro_until) };
+  return { plan: "free", until: null };
 }
 
 /* ------------------------------------------------------------------------------------ */

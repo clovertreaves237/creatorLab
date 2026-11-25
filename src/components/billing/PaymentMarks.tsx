@@ -33,6 +33,18 @@ export function OrangeMark({ className = "h-8 w-auto" }: { className?: string })
 
 /** "Pay with" row: both operators, labelled. `compact` hides the labels on very small spaces. */
 export function PaymentMethods({ compact = false, className = "" }: { compact?: boolean; className?: string }) {
+  if (compact) {
+    return (
+      <div className={`flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm font-bold text-ink ${className}`}>
+        <span className="inline-flex items-center gap-2">
+          <MtnMark className="h-6 w-auto" /> MTN MoMo
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <OrangeMark className="h-6 w-6" /> Orange Money
+        </span>
+      </div>
+    );
+  }
   return (
     <div className={`flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-stretch ${className}`}>
       <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border-2 border-ink bg-white px-2.5 py-2 sm:gap-2.5 sm:px-3">
