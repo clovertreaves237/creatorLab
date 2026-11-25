@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicMessage } from "@/lib/http/errors";
 import { requireRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { TRACKED_EVENTS } from "@/lib/activity/track";
@@ -39,7 +40,8 @@ export async function POST(request: NextRequest) {
     if (error) {
       // Tracking never blocks the user, but failures must be visible to us
       console.error("[activity] could not record event:", eventType, error.message);
-      return NextResponse.json({ ok: false, error: error.message }, { status: 202 });
+      publicMessage(error, "", "activity");
+      return NextResponse.json({ ok: false }, { status: 202 });
     }
 
     // Last active time, used by admins (cheap: at most once per page view / action)
@@ -94,6 +96,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Failed to load activity." }, { status: 500 });
+    return NextResponse.json({ error: publicMessage(err, "Failed to load activity.", "activity") }, { status: 500 });
   }
 }

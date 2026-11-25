@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicMessage } from "@/lib/http/errors";
 import { requireRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ notifications, unread: unread.count ?? 0, migrated: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Failed to load notifications." }, { status: 500 });
+    return NextResponse.json({ error: publicMessage(err, "Failed to load notifications.", "notifications") }, { status: 500 });
   }
 }
 
@@ -60,7 +61,7 @@ export async function PATCH(request: NextRequest) {
     if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Failed to update notifications." }, { status: 500 });
+    return NextResponse.json({ error: publicMessage(err, "Failed to update notifications.", "notifications") }, { status: 500 });
   }
 }
 
@@ -86,6 +87,6 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ success: true, result: data });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Failed to answer the invitation." }, { status: 500 });
+    return NextResponse.json({ error: publicMessage(err, "Failed to answer the invitation.", "notifications") }, { status: 500 });
   }
 }

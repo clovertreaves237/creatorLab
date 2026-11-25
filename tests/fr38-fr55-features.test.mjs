@@ -46,7 +46,9 @@ test("CreatorLab Requirements: Video Analysis (FR-38..43), Curator & Admin (FR-4
 
     // FR-40: title, summarized description, chapters, duration, stats
     assert.match(engineSource, /summarizeDescription/, "Must summarize YouTube description before sending (FR-40)");
-    assert.match(routeSource, /const\s*\{\s*videoId,\s*platform,\s*title,\s*description,\s*duration_seconds,\s*chapters,\s*stats\s*\}\s*=\s*body;/, "Accepts only the 5 public metadata inputs (FR-40)");
+    // FR-40: only public metadata fields are read from the request (each one type-checked and length-capped)
+    const bodyFields = [...new Set([...routeSource.matchAll(/body\??\.([a-zA-Z_]+)/g)].map((m) => m[1]))].sort();
+    assert.deepEqual(bodyFields, ["chapters", "description", "duration_seconds", "platform", "stats", "title", "videoId"], "Accepts only the public metadata inputs (FR-40)");
 
     // FR-43: Explicit enforcement that video file, audio, or transcript are never sent to Gemini
     assert.match(engineSource, /NEVER sends video file, audio, or transcript \(FR-43\)/, "Explicit FR-43 enforcement");

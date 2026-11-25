@@ -22,8 +22,13 @@ export async function POST(request: NextRequest) {
       console.warn("[payments/webhook] rejected: missing or wrong x-wh-secret");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+  } else if (process.env.VERCEL) {
+    // Fail closed on the live site: without the shared secret anyone could trigger status checks.
+    // Payments still complete through /billing/return and the settle-on-load check.
+    console.error("[payments/webhook] rejected: FAPSHI_WEBHOOK_SECRET is not configured");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   } else {
-    console.warn("[payments/webhook] FAPSHI_WEBHOOK_SECRET is not set; relying on the status re-check only");
+    console.warn("[payments/webhook] FAPSHI_WEBHOOK_SECRET is not set (local only); relying on the status re-check");
   }
 
   const body = await request.json().catch(() => null);

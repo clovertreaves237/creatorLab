@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { DEFAULT_AFTER_LOGIN, safeRedirectPath } from "@/lib/auth/redirect";
 import { adminPortalDecision, matchAdminPath, normalizeAdminPath } from "@/lib/auth/admin-path";
+import { isCrossSiteWrite } from "@/lib/http/origin";
 
 // TEMPORARY diagnostic: logs once per server instance whether the admin path is configured (length only, never the value).
 let adminConfigLogged = false;
@@ -25,6 +26,18 @@ function logAdminConfigOnce(raw: string | undefined) {
  *    reachable directly; curator tools live inside the user's dashboard.
  */
 export async function middleware(request: NextRequest) {
+  // CSRF defence in depth: API writes must come from this site (the payment webhook is exempt, it has its own secret)
+  if (
+    isCrossSiteWrite(
+      request.method,
+      request.nextUrl.pathname,
+      request.headers.get("origin"),
+      request.headers.get("x-forwarded-host") || request.headers.get("host")
+    )
+  ) {
+    console.warn("[security] blocked cross-site write to", request.nextUrl.pathname);
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   let supabaseResponse = NextResponse.next({
     request,
   });

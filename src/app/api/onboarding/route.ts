@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicMessage } from "@/lib/http/errors";
 import { requireRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { isLiveNiche } from "@/lib/constants/niches";
@@ -106,6 +107,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, niches });
   } catch (err: any) {
     console.error("Onboarding save error:", err);
-    return NextResponse.json({ error: err?.message || "Could not save your answers." }, { status: 500 });
+    return NextResponse.json({ error: publicMessage(err, "Could not save your answers.", "onboarding") }, { status: 500 });
   }
 }

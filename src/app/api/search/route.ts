@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchTopics } from "@/lib/search/engine";
 import { SourceType } from "@/lib/types/search";
+import { requireRole } from "@/lib/auth/roles";
+import { takeToken } from "@/lib/http/rate-limit";
 
 /**
  * Section 3.4 Topic Search (FR-21 to FR-27)
@@ -14,12 +16,18 @@ import { SourceType } from "@/lib/types/search";
  * FR-27: The system shall not display full article text. Snippets only.
  */
 export async function GET(request: NextRequest) {
+  // Signed-in users only: each search spends the YouTube and Gemini quotas (OWASP A01/A06).
+  const gate = await requireRole("user");
+  if ("response" in gate) return gate.response;
+  if (!takeToken(`search:${gate.account.userId}`, 40, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "You have searched a lot this hour. Please try again a little later." }, { status: 429 });
+  }
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q") || searchParams.get("topic") || "";
-    const nicheId = searchParams.get("niche") || undefined;
-    const filterType = (searchParams.get("type") as SourceType | "all") || "all";
-    const headerApiKey = request.headers.get("x-gemini-api-key");
+    const query = (searchParams.get("q") || searchParams.get("topic") || "").slice(0, 200);
+    const nicheId = (searchParams.get("niche") || "").slice(0, 64) || undefined;
+    const rawType = searchParams.get("type") || "all";
+    const filterType = (["all", "news", "blogs", "documentaries", "newsletters"].includes(rawType) ? rawType : "all") as SourceType | "all";
     const apiKey =
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_API_KEY;

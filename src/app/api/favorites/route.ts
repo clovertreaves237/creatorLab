@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicMessage } from "@/lib/http/errors";
 import { requireRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
   const { data: existing } = await db.from("favorite_creators").select("creator_id").eq("user_id", userId).eq("creator_id", creatorId).maybeSingle();
   if (existing) {
     const { error } = await db.from("favorite_creators").delete().eq("user_id", userId).eq("creator_id", creatorId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return NextResponse.json({ error: publicMessage(error, "Could not save your favourites.", "favorites") }, { status: 500 });
     return NextResponse.json({ favorited: false });
   }
   const { error } = await db.from("favorite_creators").insert({ user_id: userId, creator_id: creatorId });
@@ -64,6 +65,6 @@ export async function DELETE(request: NextRequest) {
   const creatorId = new URL(request.url).searchParams.get("creator_id");
   if (!creatorId) return NextResponse.json({ error: "creator_id is required." }, { status: 400 });
   const { error } = await db.from("favorite_creators").delete().eq("user_id", gate.account.userId).eq("creator_id", creatorId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: publicMessage(error, "Could not update your favourites.", "favorites") }, { status: 500 });
   return NextResponse.json({ success: true });
 }

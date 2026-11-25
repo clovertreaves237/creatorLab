@@ -108,6 +108,10 @@ export async function POST(request: NextRequest) {
       );
     if (!isAdmin) {
       allowance = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
+      if (!allowance) {
+        // Fail closed (OWASP A10.3): never generate when the plan cannot be checked
+        return NextResponse.json({ error: "We couldn't check your plan right now. Please try again in a moment." }, { status: 503 });
+      }
       // Just paid? Confirm any pending payment with Fapshi before refusing.
       if (allowance?.blocked && allowance.plan === "free" && (await settlePendingPayments(gate.account.userId)) > 0) {
         allowance = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
@@ -124,6 +128,9 @@ export async function POST(request: NextRequest) {
     // Atomic limit: count + record this request in one locked step (two tabs cannot both pass). Gemini is not
     // called when the slot is refused.
     const slot = await reserveScriptSlot(db, allowance, isAdmin, niche_id, effectiveTopic);
+    if (!slot.ok && "unavailable" in slot && slot.unavailable) {
+      return NextResponse.json({ error: "We couldn't check your plan right now. Please try again in a moment." }, { status: 503 });
+    }
     if (!slot.ok) {
       const fresh = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
       return blockedResponse(fresh?.blocked ? fresh : allowance);

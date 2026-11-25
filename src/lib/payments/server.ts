@@ -188,7 +188,7 @@ export async function reserveScriptSlot(
   isAdmin: boolean,
   nicheId: string,
   topic: string
-): Promise<{ ok: true; requestId: string | null } | { ok: false }> {
+): Promise<{ ok: true; requestId: string | null } | { ok: false; unavailable?: boolean }> {
   const now = Date.now();
   let limit = 0;
   let since = new Date(now - DAY_MS);
@@ -211,8 +211,15 @@ export async function reserveScriptSlot(
     p_since: since.toISOString(),
   });
   if (error) {
-    console.warn("[scripts] atomic limit unavailable (apply migration 7):", error.message);
-    return { ok: true, requestId: null };
+    // Only a missing function (migration 7 not applied) keeps the older, already-checked path.
+    // Any other database error fails CLOSED: no generation without a working limit.
+    const missing = error.code === "PGRST202" || error.code === "42883" || /could not find the function|does not exist/i.test(error.message);
+    if (missing) {
+      console.warn("[scripts] atomic limit unavailable (apply migration 7):", error.message);
+      return { ok: true, requestId: null };
+    }
+    console.error("[scripts] limit check failed:", error.message);
+    return { ok: false, unavailable: true };
   }
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.allowed) return { ok: false };

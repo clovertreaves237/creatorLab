@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeVideoPerformance } from "@/lib/analysis/engine";
 import { VideoAnalysisInput } from "@/lib/types/analysis";
+import { requireRole } from "@/lib/auth/roles";
+import { takeToken } from "@/lib/http/rate-limit";
 
 /**
  * Section 3.6 Video Analysis (FR-38 to FR-43)
@@ -13,9 +15,21 @@ import { VideoAnalysisInput } from "@/lib/types/analysis";
  * FR-43: The system shall not send any other creator's video file, audio, or transcript to Gemini.
  */
 export async function POST(request: NextRequest) {
+  // Signed-in users only: each analysis spends the Gemini quota (OWASP A01/A06).
+  const gate = await requireRole("user");
+  if ("response" in gate) return gate.response;
+  if (!takeToken(`analysis:${gate.account.userId}`, 30, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "You have run a lot of analyses this hour. Please try again a little later." }, { status: 429 });
+  }
   try {
-    const body = await request.json();
-    const { videoId, platform, title, description, duration_seconds, chapters, stats } = body;
+    const body = await request.json().catch(() => ({}));
+    const videoId = typeof body?.videoId === "string" ? body.videoId.slice(0, 64) : "";
+    const platform = body?.platform;
+    const title = typeof body?.title === "string" ? body.title.slice(0, 300) : "";
+    const description = typeof body?.description === "string" ? body.description.slice(0, 3000) : "";
+    const duration_seconds = Number.isFinite(Number(body?.duration_seconds)) ? Number(body.duration_seconds) : 0;
+    const chapters = Array.isArray(body?.chapters) ? body.chapters.slice(0, 40) : [];
+    const stats = body?.stats && typeof body.stats === "object" ? body.stats : {};
 
     if (!videoId || !title) {
       return NextResponse.json(

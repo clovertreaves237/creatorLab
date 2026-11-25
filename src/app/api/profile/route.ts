@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicMessage } from "@/lib/http/errors";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getPlan } from "@/lib/payments/server";
@@ -116,7 +117,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Profile GET error:", error);
-    return NextResponse.json({ error: error.message || "Failed to load profile" }, { status: 500 });
+    return NextResponse.json({ error: publicMessage(error, "Failed to load profile", "profile") }, { status: 500 });
   }
 }
 
@@ -168,7 +169,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 400 });
+      const bioTooLong = /profiles_bio_length/.test(updateError.message);
+      return NextResponse.json(
+        { error: bioTooLong ? "Your bio can be at most 280 characters." : publicMessage(updateError, "Could not save your profile.", "profile") },
+        { status: 400 }
+      );
     }
 
     // Also update public.profiles if exists
@@ -197,6 +202,6 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Failed to update profile" }, { status: 500 });
+    return NextResponse.json({ error: publicMessage(error, "Failed to update profile", "profile") }, { status: 500 });
   }
 }

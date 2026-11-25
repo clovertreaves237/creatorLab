@@ -157,6 +157,13 @@ const shortCache = new Map<string, string | null>();
 
 async function resolveShortLink(url: string): Promise<string | null> {
   if (shortCache.has(url)) return shortCache.get(url)!;
+  // Only TikTok short-link hosts over https (no requests to other or internal hosts)
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" || !/^(vt|vm)\.tiktok\.com$/i.test(u.hostname)) return null;
+  } catch {
+    return null;
+  }
   try {
     const res = await fetch(url, {
       redirect: "manual",
