@@ -1,10 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  devIndicators: {
-    appIsrStatus: false,
-    buildActivity: false,
-  },
+  devIndicators: false,
   // Script rules, sound rules and curator source lists are read from training-rules/ at runtime.
   // Ship that folder with every server function on Vercel.
   outputFileTracingIncludes: {

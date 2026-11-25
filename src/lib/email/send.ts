@@ -10,7 +10,7 @@ import nodemailer from "nodemailer";
  * If these are missing, sendEmail() returns { sent: false } and nothing breaks.
  */
 
-let transporter: nodemailer.Transporter | null = null;
+let transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
 
 function getTransporter() {
   const user = process.env.GMAIL_USER;
