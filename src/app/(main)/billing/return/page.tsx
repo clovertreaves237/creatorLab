@@ -63,13 +63,13 @@ function ReturnContent() {
 
   // Paid: go straight back into the app (full load so the unlocked plan is read fresh; replace keeps
   // the payment pages out of the Back history).
-  const [countdown, setCountdown] = useState(5);
-  const goToApp = useCallback(() => window.location.replace("/script-generator"), []);
+  const [countdown, setCountdown] = useState(3);
+  const goToApp = useCallback(() => window.location.replace("/script-generator?upgraded=1"), []);
   useEffect(() => {
     if (phase !== "successful") return;
-    setCountdown(5);
+    setCountdown(3);
     const t = setInterval(() => setCountdown((c) => (c > 1 ? c - 1 : 0)), 1000);
-    const go = setTimeout(goToApp, 5000);
+    const go = setTimeout(goToApp, 3000);
     return () => {
       clearInterval(t);
       clearTimeout(go);
@@ -118,11 +118,14 @@ function ReturnContent() {
               )}
             </p>
             <button type="button" onClick={goToApp} className="sk-btn-ink mt-7 w-full justify-center py-3.5 text-base sm:w-auto sm:px-8">
-              Continue writing scripts <ArrowRight className="h-4 w-4" />
+              Go to Creator Engine <ArrowRight className="h-4 w-4" />
             </button>
-            <p className="mt-3 text-xs text-pencil" aria-live="polite">
-              Taking you back to Creator Engine in {countdown}s…
+            <p className="mt-3 text-sm text-pencil" aria-live="polite">
+              Taking you there in <span className="tabular-nums font-bold text-ink">{countdown}</span>s
             </p>
+            <div className="mx-auto mt-3 h-1.5 w-40 overflow-hidden rounded-full bg-line" aria-hidden>
+              <div className="h-full origin-left bg-ink motion-safe:animate-[shrinkx_3s_linear_forwards]" />
+            </div>
           </>
         )}
 
@@ -138,7 +141,7 @@ function ReturnContent() {
                 : "This payment was not completed in time. No money was taken."}
             </p>
             <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
-              <Link href={`/billing/checkout?plan=${info?.plan || "creator"}`} className="sk-btn-ink justify-center py-3 sm:px-7">
+              <Link href="/billing" className="sk-btn-ink min-h-[48px] justify-center sm:px-7">
                 <RotateCcw className="h-4 w-4" /> Try again
               </Link>
               <Link href="/script-generator" className="sk-btn justify-center py-3 sm:px-7">
@@ -151,7 +154,7 @@ function ReturnContent() {
         {phase === "waiting" && (
           <>
             <Clock className="mx-auto h-14 w-14 text-ink" strokeWidth={1.75} />
-            <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink">Still waiting for confirmation</h1>
+            <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink">We&apos;re still confirming your payment</h1>
             <p className="mt-3 text-sm text-pencil">
               If you approved the payment on your phone, it can take a moment to arrive. Pro switches on automatically once it
               does. You can leave this page.
@@ -160,8 +163,8 @@ function ReturnContent() {
               <button type="button" onClick={checkAgain} className="sk-btn-ink justify-center py-3 sm:px-7">
                 <RotateCcw className="h-4 w-4" /> Check again
               </button>
-              <Link href="/billing" className="sk-btn justify-center py-3 sm:px-7">
-                View my plan
+              <Link href="/script-generator" className="sk-btn min-h-[48px] justify-center sm:px-7">
+                Back to Creator Engine
               </Link>
             </div>
           </>
@@ -170,11 +173,16 @@ function ReturnContent() {
         {phase === "error" && (
           <>
             <XCircle className="mx-auto h-14 w-14 text-pencil" strokeWidth={1.75} />
-            <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">We couldn&apos;t check this payment</h1>
-            <p className="mt-3 text-sm text-pencil">{message}</p>
-            <Link href="/billing" className="sk-btn mt-7 justify-center py-3 sm:px-7">
-              View my plan
-            </Link>
+            <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">We couldn&apos;t find this payment</h1>
+            <p className="mt-3 text-sm text-pencil">{message} If you just paid, your plan switches on automatically.</p>
+            <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <Link href="/script-generator" className="sk-btn-ink min-h-[48px] justify-center sm:px-7">
+                Back to Creator Engine
+              </Link>
+              <Link href="/billing" className="sk-btn min-h-[48px] justify-center sm:px-7">
+                View my plan
+              </Link>
+            </div>
           </>
         )}
       </div>

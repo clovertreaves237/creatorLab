@@ -64,15 +64,27 @@ function CheckoutContent() {
   const [data, setData] = useState<any>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { startCheckout, starting, error } = useCheckout();
+  const [extendAnyway, setExtendAnyway] = useState(false);
 
   useEffect(() => {
-    fetch("/api/billing", { cache: "no-store" })
-      .then(async (r) => {
-        const json = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(json.error || "Could not load the plans.");
-        setData(json);
-      })
-      .catch((e) => setLoadError(e.message));
+    const load = () =>
+      fetch("/api/billing", { cache: "no-store" })
+        .then(async (r) => {
+          const json = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(json.error || "Could not load the plans.");
+          setData(json);
+        })
+        .catch((e) => setLoadError(e.message));
+    load();
+    // Back from Fapshi (bfcache) or back to the tab: re-check, so a finished payment is never offered again
+    const onShow = (e: PageTransitionEvent) => e.persisted && load();
+    const onVisible = () => document.visibilityState === "visible" && load();
+    window.addEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   if (loadError) return <p className="mx-auto max-w-lg px-4 py-24 text-center text-sm text-red-700">{loadError}</p>;
@@ -88,6 +100,35 @@ function CheckoutContent() {
     );
   }
   const extending = data.plan === plan.id;
+  const coveredByAgency = data.plan === "agency" && plan.id === "creator";
+  const untilText = data.planUntil
+    ? new Date(data.planUntil).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })
+    : "";
+
+  // Already on this plan (or on Agency & Academy, which includes Creator): do not ask to pay again by default.
+  if ((extending && !extendAnyway) || coveredByAgency) {
+    const current = coveredByAgency ? "Agency & Academy" : plan.name;
+    return (
+      <div className="mx-auto w-full max-w-lg px-4 py-14 sm:py-20">
+        <div className="sk-card bg-white p-6 text-center sm:p-9">
+          <Check className="mx-auto h-12 w-12 text-score" strokeWidth={2.5} />
+          <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink">
+            You&apos;re already on <span className="hl-mint">{current}</span>
+          </h1>
+          {untilText && <p className="mt-3 text-base text-pencil">Active until {untilText}.</p>}
+          {coveredByAgency && <p className="mt-1 text-sm text-pencil">It includes everything in Creator.</p>}
+          <Link href="/script-generator" className="sk-btn-ink mt-7 min-h-[52px] w-full justify-center text-base">
+            Go to Creator Engine <ArrowRight className="h-4 w-4" />
+          </Link>
+          {extending && (
+            <button type="button" onClick={() => setExtendAnyway(true)} className="sk-btn-ghost mt-3 min-h-[44px] w-full justify-center text-sm">
+              Add {plan.days} more days to {plan.name}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:py-16">
@@ -165,7 +206,7 @@ function CheckoutContent() {
               type="button"
               onClick={() => startCheckout(plan.product)}
               disabled={starting}
-              className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-xl bg-ink px-6 py-4 text-lg font-extrabold text-white transition-colors hover:bg-ink-soft disabled:opacity-60"
+              className="mt-5 flex h-14 w-full items-center justify-center gap-2.5 rounded-xl bg-ink px-6 text-lg font-extrabold text-white transition-colors hover:bg-ink-soft disabled:opacity-70"
             >
               {starting ? (
                 <>

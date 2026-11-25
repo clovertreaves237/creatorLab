@@ -12,6 +12,7 @@ import { track } from "@/lib/activity/track";
 import { SoundOffer } from "@/components/sound/SoundOffer";
 import { UpgradeModal, type UpgradeInfo } from "@/components/billing/UpgradeModal";
 import { formatUnlockTime } from "@/components/billing/useCheckout";
+import { LiveCountdown } from "@/components/billing/LiveCountdown";
 
 const MAX_NOTES_CHARS = 5000;
 
@@ -107,6 +108,27 @@ function ScriptGeneratorContent() {
   };
   useEffect(() => {
     loadBilling();
+    // Back/Forward cache or returning to the tab: never show a stale paywall after paying
+    const onShow = (e: PageTransitionEvent) => e.persisted && loadBilling();
+    const onVisible = () => document.visibilityState === "visible" && loadBilling();
+    window.addEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // One-time "you upgraded" confirmation (?upgraded=1 from the payment return page), removed from the URL
+  const [justUpgraded, setJustUpgraded] = useState(false);
+  useEffect(() => {
+    if (searchParams.get("upgraded") === "1") {
+      setJustUpgraded(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("upgraded");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const openUpgrade = async (code: UpgradeInfo["code"], nextAt: string | null) => {
     const b = billing || (await loadBilling());
@@ -1069,20 +1091,43 @@ function ScriptGeneratorContent() {
           {/* BOTTOM DOCKED INPUT CAPSULE (chat controls) */}
           {/* ============================================================ */}
           <div className="p-2 sm:p-3 bg-white border-t border-line shrink-0">
+            {/* Just paid: confirm the upgrade once */}
+            {justUpgraded && billing && (billing.plan === "creator" || billing.plan === "agency") && (
+              <div role="status" className="max-w-4xl mx-auto mb-3 flex items-start gap-3 rounded-2xl border-2 border-ink bg-hl-mint p-4">
+                <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-ink" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-extrabold text-ink sm:text-lg">
+                    You&apos;re now on {billing.plan === "agency" ? "Agency & Academy" : "Creator"}!
+                  </p>
+                  <p className="text-sm text-ink/80">
+                    All creators unlocked, {billing.dailyLimit > 0 ? `${billing.dailyLimit} scripts per day` : "unlimited scripts"}.
+                  </p>
+                </div>
+                <button type="button" onClick={() => setJustUpgraded(false)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink hover:bg-white/60" aria-label="Dismiss">
+                  <span aria-hidden className="text-xl leading-none">×</span>
+                </button>
+              </div>
+            )}
+
             {/* Out of free scripts: big, impossible-to-miss banner with a real Subscribe button */}
             {billing && blockedNow && billing.plan === "free" && (
               <div className="max-w-4xl mx-auto mb-3 rounded-2xl border-2 border-ink bg-hl-yellow p-4 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-5">
                 <div className="min-w-0">
-                  <p className="text-lg font-extrabold leading-tight text-ink sm:text-xl">You&apos;ve used today&apos;s free script</p>
-                  <p className="mt-1 flex items-center gap-1.5 text-sm text-ink/80">
-                    <Clock className="h-4 w-4 shrink-0" />
-                    Next free script {blockedNow.nextAt ? formatUnlockTime(blockedNow.nextAt) : "tomorrow"}. Or subscribe to keep writing now.
+                  <p className="text-lg font-extrabold leading-tight text-ink sm:text-xl">You&apos;re out of scripts for today</p>
+                  <p className="mt-1 text-sm text-ink/80">
+                    You&apos;ve used your free script. Come back in 24 hours, or subscribe to keep creating.
                   </p>
+                  {blockedNow.nextAt && (
+                    <p className="mt-2 flex items-center gap-1.5 text-sm font-bold text-ink">
+                      <Clock className="h-4 w-4 shrink-0" />
+                      Next free script in <LiveCountdown to={blockedNow.nextAt} onDone={loadBilling} />
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
                   onClick={() => openUpgrade(blockedNow.code, blockedNow.nextAt)}
-                  className="mt-3 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-ink px-6 py-3.5 text-base font-extrabold text-white transition-colors hover:bg-ink-soft sm:mt-0 sm:w-auto sm:text-lg"
+                  className="mt-3 flex min-h-[52px] w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-ink px-7 text-lg font-extrabold text-white transition-colors hover:bg-ink-soft sm:mt-0 sm:w-auto"
                 >
                   Subscribe <ArrowRight className="h-5 w-5" />
                 </button>
@@ -1097,7 +1142,7 @@ function ScriptGeneratorContent() {
                     <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
                       {billing.plan === "agency" ? "Agency & Academy" : "Creator"}
                     </span>
-                    {billing.usedToday}/{billing.dailyLimit > 0 ? billing.dailyLimit : "∞"} today · until{" "}
+                    {billing.dailyLimit > 0 ? `${Math.max(0, billing.dailyLimit - billing.usedToday)} of ${billing.dailyLimit} scripts left today` : "Unlimited scripts"} · until{" "}
                     {billing.planUntil ? new Date(billing.planUntil).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : ""}
                   </span>
                 ) : (
@@ -1273,10 +1318,10 @@ function ScriptGeneratorContent() {
                     <button
                       type="button"
                       onClick={() => handleGenerateScript()}
-                      disabled={!rawNotesInput.trim() && contextAttachments.length === 0}
+                      disabled={Boolean(blockedNow) || (!rawNotesInput.trim() && contextAttachments.length === 0)}
                       className="w-9 h-9 rounded-full bg-ink hover:bg-ink-soft text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-                      title="Write script"
-                      aria-label="Write script"
+                      title={blockedNow ? "You're out of scripts for now. Subscribe or wait for the countdown." : "Write script"}
+                      aria-label={blockedNow ? "Write script (unavailable: out of scripts, see the message above)" : "Write script"}
                     >
                       <PenLine className="w-4 h-4" />
                     </button>

@@ -20,13 +20,23 @@ export default function BillingPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/billing", { cache: "no-store" })
-      .then(async (r) => {
-        const json = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(json.error || "Could not load your plan.");
-        setData(json);
-      })
-      .catch((e) => setLoadError(e.message));
+    const load = () =>
+      fetch("/api/billing", { cache: "no-store" })
+        .then(async (r) => {
+          const json = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(json.error || "Could not load your plan.");
+          setData(json);
+        })
+        .catch((e) => setLoadError(e.message));
+    load();
+    const onShow = (e: PageTransitionEvent) => e.persisted && load();
+    const onVisible = () => document.visibilityState === "visible" && load();
+    window.addEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   if (loadError) return <p className="mx-auto max-w-lg px-4 py-24 text-center text-sm text-red-700">{loadError}</p>;

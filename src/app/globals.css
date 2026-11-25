@@ -122,17 +122,20 @@ nextjs-portal,
       text-sm font-bold text-ink transition-transform duration-150 select-none
       disabled:cursor-not-allowed disabled:opacity-50;
   }
-  .sk-btn:hover:not(:disabled) {
-    transform: translate(-1px, -1px);
-  }
-  .sk-btn:hover:not(:disabled)::before {
-    box-shadow: 3px 3px 0 var(--ink);
-  }
-  .sk-btn:active:not(:disabled) {
-    transform: translate(1px, 1px);
-  }
-  .sk-btn:active:not(:disabled)::before {
-    box-shadow: none;
+  /* Lift on hover only with a real mouse: on touch screens it made buttons jump when tapped. */
+  @media (hover: hover) and (pointer: fine) {
+    .sk-btn:hover:not(:disabled) {
+      transform: translate(-1px, -1px);
+    }
+    .sk-btn:hover:not(:disabled)::before {
+      box-shadow: 3px 3px 0 var(--ink);
+    }
+    .sk-btn:active:not(:disabled) {
+      transform: translate(1px, 1px);
+    }
+    .sk-btn:active:not(:disabled)::before {
+      box-shadow: none;
+    }
   }
   .sk-btn-ink {
     @apply sk-btn text-white;
@@ -352,4 +355,22 @@ nextjs-portal,
   .sk-loader__hl-stroke { animation: none; stroke: var(--hl-yellow); stroke-dashoffset: 0; }
   .sk-loader--ai .sk-loader__hl { animation: none; transform: scaleX(1); fill: var(--hl-yellow); }
   .sk-loader__tip { animation: none; opacity: 0; }
+}
+
+
+/* ---------- Stability (no layout jumps) ---------- */
+html {
+  scrollbar-gutter: stable; /* opening a popup (scroll lock) does not shift the page sideways */
+}
+@keyframes shrinkx {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ALLOWED_NICHES, getNicheById, isLiveNiche } from "@/lib/constants/niches";
 import { CreatorData, VideoData, rankCreators } from "@/lib/constants/creators";
@@ -8,9 +8,11 @@ import { createClient } from "@/lib/supabase/client";
 import { VideoModal } from "@/components/creators/VideoModal";
 import { VideoAnalysisModal } from "@/components/creators/VideoAnalysisModal";
 import { MobiusLoader } from "@/components/ui/MobiusLoader";
-import { Video, Play, TrendingUp, Bookmark, ExternalLink, ChevronRight, PenLine, Loader2, Calendar, Eye, ThumbsUp, MessageSquare, Award, Search, Heart, ShieldCheck, UserCheck, Pencil, Trash2 } from "lucide-react";
+import { Video, Play, TrendingUp, Bookmark, ExternalLink, ChevronRight, PenLine, Loader2, Calendar, Eye, ThumbsUp, MessageSquare, Award, Search, Heart, ShieldCheck, UserCheck, Pencil, Trash2, Lock } from "lucide-react";
 import Link from "next/link";
 import { track } from "@/lib/activity/track";
+import { useEntitlement } from "@/components/billing/useEntitlement";
+import type { OutlierCard, UnlockedOutlier } from "@/lib/outliers/shape";
 
 
 /** Favourites live in the database (per account). Old browser-only favourites are moved over once. */
@@ -100,125 +102,30 @@ function CreatorsContent() {
     }
   }, [savedLoaded, savedNiches, currentNicheId, router]);
 
-  // Fetch only creators added by curators from the Curator Portal
-  useEffect(() => {
-    let isMounted = true;
-    async function loadCuratedCreators() {
-      setLoadingCurated(true);
-      try {
-        const { data: dbCreators } = await supabase
-          .from("creators")
-          .select(`
-            id,
-            niche_id,
-            platform,
-            display_name,
-            handle,
-            profile_url,
-            followers,
-            followers_checked_on,
-            criteria_checked,
-            curated_by,
-            curated_on,
-            videos (
-              video_id,
-              platform,
-              title,
-              description_summary,
-              published_at,
-              duration_seconds,
-              thumbnail_url,
-              video_url,
-              video_snapshots (
-                views,
-                likes,
-                comments,
-                snapshot_at
-              )
-            )
-          `)
-          .eq("niche_id", activeNiche.id)
-          .eq("active", true)
-          .order("curated_on", { ascending: false });
-
-        if (dbCreators && isMounted) {
-          const mapped: CreatorData[] = dbCreators.map((c: any) => {
-            const vids: VideoData[] = (c.videos || []).map((v: any) => {
-              // Latest snapshot (FR-48 keeps every refresh as a new row)
-              const snap = [...(v.video_snapshots || [])].sort((a: any, b: any) => String(b.snapshot_at).localeCompare(String(a.snapshot_at)))[0] || {};
-              const pubDate = v.published_at ? v.published_at.split("T")[0] : new Date().toISOString().split("T")[0];
-              const daysAgo = Math.max(0, Math.floor((Date.now() - new Date(pubDate).getTime()) / (1000 * 60 * 60 * 24)));
-              const dur = v.duration_seconds || 0; // 0 = length not entered yet (TikTok)
-              const mins = Math.floor(dur / 60);
-              const secs = dur % 60;
-              return {
-                id: v.video_id,
-                title: v.title || "Curated Video",
-                short_description: v.description_summary || "",
-                publish_date: pubDate,
-                duration_seconds: dur,
-                duration_formatted: dur > 0 ? `${mins}:${secs < 10 ? "0" : ""}${secs}` : "",
-                thumbnail_url: v.thumbnail_url || (v.platform === "youtube" ? `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg` : ""),
-                video_url: v.video_url || "",
-                // TikTok's official embeddable player plays the video right here (no need to leave CreatorLab)
-                embed_url: v.platform === "youtube" ? `https://www.youtube-nocookie.com/embed/${v.video_id}` : `https://www.tiktok.com/player/v1/${v.video_id}?music_info=1&description=1&rel=0`,
-                is_best_performing: true,
-                days_ago: daysAgo,
-                stats: {
-                  views: snap.views ?? null,
-                  likes: snap.likes ?? null,
-                  comments: snap.comments ?? null,
-                  as_of: snap.snapshot_at ? snap.snapshot_at.split("T")[0] : new Date().toISOString().split("T")[0],
-                },
-              };
-            });
-
-            // Best performing first, then newest
-            vids.sort((a, b) => (b.stats.views ?? -1) - (a.stats.views ?? -1) || b.publish_date.localeCompare(a.publish_date));
-
-            const followersNum = c.followers || 0;
-            const followersFormatted = c.followers == null ? "Not shown" : followersNum >= 1000000 
-              ? `${(followersNum / 1000000).toFixed(1)}M` 
-              : followersNum >= 1000 
-              ? `${(followersNum / 1000).toFixed(0)}K` 
-              : `${followersNum}`;
-
-            return {
-              id: c.id,
-              niche_id: c.niche_id,
-              platform: c.platform,
-              display_name: c.display_name,
-              handle: c.handle.startsWith("@") ? c.handle : `@${c.handle}`,
-              profile_url: c.profile_url || `https://${c.platform}.com/@${c.handle}`,
-              channel_id: c.id,
-              followers_formatted: followersFormatted,
-              followers_checked_on: c.followers_checked_on ? c.followers_checked_on.split("T")[0] : (c.curated_on || "Recent"),
-              curated_by: c.curated_by || "Curator",
-              curated_on: c.curated_on || new Date().toISOString().split("T")[0],
-              tags: c.criteria_checked || [],
-              criteria_checked: c.criteria_checked || [],
-              // Only real videos entered by curators or pulled from YouTube (no placeholder videos)
-              videos: vids,
-              score: 100,
-            };
-          });
-
-          setCuratedList(mapped);
-        }
-      } catch (err) {
-        console.warn("Error fetching curated creators:", err);
-      } finally {
-        if (isMounted) setLoadingCurated(false);
-      }
+  // Outliers come from the server, already filtered by plan (locked cards carry no creator or video data)
+  const [outliers, setOutliers] = useState<{ youtube: OutlierCard[]; tiktok: OutlierCard[]; unlocked: boolean } | null>(null);
+  const loadOutliers = useCallback(async () => {
+    setLoadingCurated(true);
+    try {
+      const res = await fetch(`/api/outliers?niche=${encodeURIComponent(activeNiche.id)}`, { cache: "no-store" });
+      const json = res.ok ? await res.json() : null;
+      setOutliers(json ? { youtube: json.youtube || [], tiktok: json.tiktok || [], unlocked: Boolean(json.unlocked) } : { youtube: [], tiktok: [], unlocked: false });
+      setCuratedList(((json ? [...json.youtube, ...json.tiktok] : []) as OutlierCard[]).filter((c): c is UnlockedOutlier => !c.locked));
+    } catch (err) {
+      console.warn("Error fetching curated creators:", err);
+    } finally {
+      setLoadingCurated(false);
     }
-
-    loadCuratedCreators();
-    return () => { isMounted = false; };
   }, [activeNiche.id]);
+  useEffect(() => {
+    loadOutliers();
+  }, [loadOutliers]);
+  // Plan + upgrade popup; reload the outliers when the plan changes (e.g. back from paying)
+  const { openUpgrade, upgradeModal } = useEntitlement(loadOutliers);
 
   // Only real creators from the database (curators + the team's source lists), ranked by engagement (FR-15)
-  const finalYoutube = rankCreators(curatedList.filter((c) => c.platform === "youtube"));
-  const finalTiktok = rankCreators(curatedList.filter((c) => c.platform === "tiktok"));
+  const finalYoutube: OutlierCard[] = outliers?.youtube || [];
+  const finalTiktok: OutlierCard[] = outliers?.tiktok || [];
 
   // Which video each card is showing (users can pick any of the creator's videos)
   const [pickedVideo, setPickedVideo] = useState<Record<string, string>>({});
@@ -254,6 +161,7 @@ function CreatorsContent() {
         return next;
       });
       if (inlinePlayingId === videoId) setInlinePlayingId(null);
+      loadOutliers();
       setConfirmDeleteId(null);
     } catch (err: any) {
       setCardError({ id: videoId, message: err?.message || "Could not delete this video." });
@@ -411,6 +319,7 @@ function CreatorsContent() {
       {/* ============================================================== */}
       {/* CREATORS GRID (Dynamically curated from Curator Portal)        */}
       {/* ============================================================== */}
+      {upgradeModal}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loadingCurated ? (
           <div className="col-span-full py-16 flex flex-col items-center justify-center text-center">
@@ -437,7 +346,28 @@ function CreatorsContent() {
             </button>
           </div>
         ) : (
-        activeCreators.map((creator, rankIndex) => {
+        activeCreators.map((card, rankIndex) => {
+          if (card.locked) {
+            return (
+              <button
+                key={`locked-${card.platform}-${card.rank}`}
+                type="button"
+                onClick={() => openUpgrade("UPGRADE")}
+                className="group flex min-h-[15rem] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-ink bg-paper-deep p-6 text-center transition-colors hover:bg-white focus:outline-none focus-visible:ring-4 focus-visible:ring-accent/30"
+                aria-label={`Creator ranked #${card.rank} is locked. Subscribe to unlock`}
+              >
+                <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-ink bg-white">
+                  <Lock className="h-6 w-6 text-ink" />
+                </span>
+                <span className="text-sm font-bold uppercase tracking-wide text-pencil">Creator #{card.rank}</span>
+                <span className="max-w-[16rem] text-base font-semibold text-ink">Subscribe to unlock every creator and their top videos</span>
+                <span className="mt-1 inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-ink px-6 text-base font-extrabold text-white">
+                  Subscribe <ChevronRight className="h-4 w-4" />
+                </span>
+              </button>
+            );
+          }
+          const creator = card;
           // Filter videos according to FR-17 durationTab
           const displayedVideos =
             durationTab === "best"

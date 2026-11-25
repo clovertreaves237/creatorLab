@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Globe, Menu, X, User, LogOut, Settings, ChevronDown, CheckCircle2, Bookmark, ClipboardList, ShieldCheck, CreditCard } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export function Header() {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
 
   const [lang, setLang] = useState<"en" | "fr">("en");
@@ -105,17 +106,29 @@ export function Header() {
   };
 
   // Staff links come from the server (database role); the admin path is only sent to admins (FR-6).
-  const [staff, setStaff] = useState<{ isCurator: boolean; adminPath: string | null }>({ isCurator: false, adminPath: null });
+  const [staff, setStaff] = useState<{ isCurator: boolean; adminPath: string | null; plan: string | null }>({ isCurator: false, adminPath: null, plan: null });
   useEffect(() => {
     if (!user?.id) {
-      setStaff({ isCurator: false, adminPath: null });
+      setStaff({ isCurator: false, adminPath: null, plan: null });
       return;
     }
-    fetch("/api/me", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((me) => me && setStaff({ isCurator: Boolean(me.isCurator), adminPath: me.adminPath || null }))
-      .catch(() => {});
-  }, [user?.id]);
+    const load = () =>
+      fetch("/api/me", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((me) => me && setStaff({ isCurator: Boolean(me.isCurator), adminPath: me.adminPath || null, plan: me.plan || "free" }))
+        .catch(() => {});
+    load();
+    // Re-check after Back/Forward or returning to the tab (e.g. after paying), so the badge is never stale
+    const onShow = (e: PageTransitionEvent) => e.persisted && load();
+    const onVisible = () => document.visibilityState === "visible" && load();
+    window.addEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [user?.id, pathname]);
+  const planLabel = staff.plan === "agency" ? "Agency & Academy" : staff.plan === "creator" ? "Creator" : null;
 
   const navLinks = [
     { href: "/niches", en: "Niches", fr: "Thématiques" },
@@ -151,6 +164,16 @@ export function Header() {
 
           {user && <NotificationBell />}
 
+          {user && staff.plan === "free" && (
+            <Link href="/billing" className="hidden md:inline-flex min-h-[44px] items-center rounded-xl bg-ink px-5 text-sm font-extrabold text-white hover:bg-ink-soft">
+              Subscribe
+            </Link>
+          )}
+          {user && planLabel && (
+            <Link href="/billing" className="hidden md:inline-flex items-center rounded-full border-2 border-ink px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-ink hover:bg-paper-deep" title="Your plan">
+              {planLabel}
+            </Link>
+          )}
           {user ? (
             <div className="relative" ref={dropdownRef}>
               <button
@@ -261,9 +284,16 @@ export function Header() {
               <Link href="/profile" onClick={() => setMobileMenuOpen(false)} className="py-3 text-base text-ink border-b border-line">
                 Profile & Dashboard
               </Link>
-              <Link href="/billing" onClick={() => setMobileMenuOpen(false)} className="py-3 text-base text-ink border-b border-line">
-                Plan &amp; Billing
-              </Link>
+              {staff.plan === "free" ? (
+                <Link href="/billing" onClick={() => setMobileMenuOpen(false)} className="my-2 flex min-h-[48px] items-center justify-center rounded-xl bg-ink text-base font-extrabold text-white">
+                  Subscribe
+                </Link>
+              ) : (
+                <Link href="/billing" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-between py-3 text-base text-ink border-b border-line">
+                  Plan &amp; Billing
+                  {planLabel && <span className="rounded-full border-2 border-ink px-2 py-0.5 text-[11px] font-extrabold uppercase">{planLabel}</span>}
+                </Link>
+              )}
               <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="py-3 text-base text-ink border-b border-line">
                 Account Settings
               </Link>

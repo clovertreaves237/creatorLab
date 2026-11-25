@@ -824,6 +824,15 @@ export default function ProfilePage() {
               ))}
             </div>
           )}
+          {recommendations?.lockedTopics > 0 && (
+            <Link
+              href="/billing"
+              className="flex min-h-[48px] items-center justify-between gap-3 rounded-xl border-2 border-dashed border-ink bg-paper-deep px-4 py-3 text-sm font-semibold text-ink hover:bg-white"
+            >
+              <span>{recommendations.lockedTopics} more recommended videos are locked on the free plan</span>
+              <span className="shrink-0 rounded-lg bg-ink px-3 py-1.5 text-xs font-extrabold text-white">Subscribe</span>
+            </Link>
+          )}
 
           {recommendations?.creators?.length > 0 && (
             <div className="space-y-3">

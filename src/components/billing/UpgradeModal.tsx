@@ -46,7 +46,21 @@ export function UpgradeModal({ info, onClose }: { info: UpgradeInfo | null; onCl
     if (!info) return;
     setStep(info.code === "UPGRADE" ? "plans" : "limit");
     const t = setInterval(() => setNow(Date.now()), 30_000);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") return onClose();
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      // keep keyboard focus inside the dialog
+      const items = [...dialogRef.current.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input,[tabindex]:not([tabindex="-1"])')];
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -76,13 +90,17 @@ export function UpgradeModal({ info, onClose }: { info: UpgradeInfo | null; onCl
         aria-modal="true"
         aria-labelledby="upgrade-title"
         onClick={(e) => e.stopPropagation()}
-        className={`relative max-h-[94vh] w-full min-w-0 overflow-y-auto overscroll-contain rounded-t-3xl border-2 border-b-0 border-ink bg-white px-5 pb-6 pt-3 outline-none sm:rounded-3xl sm:border-b-2 sm:p-8 ${wide ? "sm:max-w-3xl" : "sm:max-w-lg"}`}
+        className={`relative w-full min-w-0 overflow-y-auto overscroll-contain bg-white px-5 pt-3 outline-none pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:max-h-[92dvh] sm:rounded-3xl sm:border-2 sm:border-ink sm:p-8 ${
+          wide
+            ? "h-[100dvh] pt-[max(0.75rem,env(safe-area-inset-top))] sm:h-auto sm:max-w-3xl"
+            : "max-h-[94dvh] rounded-t-3xl border-2 border-b-0 border-ink sm:max-w-lg"
+        }`}
       >
-        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-line sm:hidden" aria-hidden />
+        {!wide && <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-line sm:hidden" aria-hidden />}
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 rounded-xl p-2 text-pencil transition-colors hover:bg-paper-deep hover:text-ink"
+          className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] flex h-11 w-11 items-center justify-center rounded-xl text-pencil transition-colors hover:bg-paper-deep hover:text-ink sm:right-3 sm:top-3"
           aria-label="Close"
         >
           <X className="h-5 w-5" />
