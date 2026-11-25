@@ -8,6 +8,7 @@ import { HandDrawnFilters } from "@/components/ui/HandDrawn";
 import { ActivityTracker } from "@/components/activity/ActivityTracker";
 import { Suspense } from "react";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme/themes";
+import { siteUrl } from "@/lib/site-url";
 
 const sans = Archivo({
   subsets: ["latin"],
@@ -24,7 +25,7 @@ const serif = Gelasio({
   display: "swap",
 });
 
-const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://creator-lab-beta.vercel.app").replace(/\/+$/, "");
+const SITE_URL = siteUrl();
 const SITE_DESCRIPTION =
   "Short-form creator intelligence for Cameroon and Africa: curated creators, fresh topics and ready-to-use scripts.";
 

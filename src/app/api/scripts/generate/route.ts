@@ -9,7 +9,7 @@ import {
 } from "@/lib/scripts/gemini";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole, hasRole } from "@/lib/auth/roles";
-import { getAllowance } from "@/lib/payments/server";
+import { getAllowance, settlePendingPayments } from "@/lib/payments/server";
 import {
   saveGeneratedScript,
   getRecentScriptsForNiche,
@@ -93,7 +93,11 @@ export async function POST(request: NextRequest) {
     // Plans: free = free_scripts_per_day per rolling 24h; Pro (paid via Fapshi) and staff = daily_script_limit (NFR-20).
     // Admins are not limited. Enforced here on the server, whatever the browser shows.
     if (!hasRole(gate.account.role, "admin")) {
-      const allowance = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
+      let allowance = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
+      // Just paid? Confirm any pending payment with Fapshi before refusing.
+      if (allowance?.blocked && allowance.plan === "free" && (await settlePendingPayments(gate.account.userId)) > 0) {
+        allowance = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
+      }
       if (allowance?.blocked) {
         return NextResponse.json(
           { error: allowance.blocked.message, code: allowance.blocked.code, nextAt: allowance.blocked.nextAt, plan: allowance.plan },

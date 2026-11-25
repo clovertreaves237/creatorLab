@@ -61,6 +61,21 @@ function ReturnContent() {
     };
   }, [ref, check]);
 
+  // Paid: go straight back into the app (full load so the unlocked plan is read fresh; replace keeps
+  // the payment pages out of the Back history).
+  const [countdown, setCountdown] = useState(5);
+  const goToApp = useCallback(() => window.location.replace("/script-generator"), []);
+  useEffect(() => {
+    if (phase !== "successful") return;
+    setCountdown(5);
+    const t = setInterval(() => setCountdown((c) => (c > 1 ? c - 1 : 0)), 1000);
+    const go = setTimeout(goToApp, 5000);
+    return () => {
+      clearInterval(t);
+      clearTimeout(go);
+    };
+  }, [phase, goToApp]);
+
   const checkAgain = () => {
     startedAt.current = Date.now();
     setPhase("checking");
@@ -102,9 +117,12 @@ function ReturnContent() {
                 </>
               )}
             </p>
-            <Link href="/script-generator" className="sk-btn-ink mt-7 w-full justify-center py-3.5 text-base sm:w-auto sm:px-8">
+            <button type="button" onClick={goToApp} className="sk-btn-ink mt-7 w-full justify-center py-3.5 text-base sm:w-auto sm:px-8">
               Continue writing scripts <ArrowRight className="h-4 w-4" />
-            </Link>
+            </button>
+            <p className="mt-3 text-xs text-pencil" aria-live="polite">
+              Taking you back to Creator Engine in {countdown}s…
+            </p>
           </>
         )}
 

@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { siteUrl } from "@/lib/site-url";
 
 /**
  * Outgoing email through a Gmail account (SMTP + Google "app password").
@@ -30,7 +31,7 @@ export function emailConfigured(): boolean {
 }
 
 export function appUrl(path = ""): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const base = siteUrl();
   return `${base}${path}`;
 }
 

@@ -141,3 +141,38 @@ export async function reconcileWithFapshi(payment: PaymentRecord): Promise<Recon
     },
   });
 }
+
+/**
+ * Settles the user's recent pending payments with Fapshi (authoritative status, idempotent grant).
+ * Called whenever the app loads the plan, so a paid plan switches on even if the user never reached
+ * /billing/return (closed tab, wrong return address, webhook not delivered).
+ * Throttled per payment (Fapshi allows 6 status checks a minute per transaction).
+ */
+export async function settlePendingPayments(userId: string): Promise<number> {
+  let settled = 0;
+  try {
+    const db = createServiceClient();
+    const { data: pending } = await db
+      .from("payments")
+      .select(PAYMENT_COLUMNS)
+      .eq("user_id", userId)
+      .eq("status", "pending")
+      .not("fapshi_trans_id", "is", null)
+      .gte("created_at", new Date(Date.now() - 2 * DAY_MS).toISOString())
+      .order("created_at", { ascending: false })
+      .limit(3);
+    for (const p of (pending as any[]) || []) {
+      const last = p.last_checked_at ? new Date(p.last_checked_at).getTime() : 0;
+      if (Date.now() - last < 10_000) continue;
+      try {
+        const r = await reconcileWithFapshi(p);
+        if (r.status === "successful") settled++;
+      } catch (err: any) {
+        console.error("[payments] settle failed:", err?.message);
+      }
+    }
+  } catch (err: any) {
+    console.error("[payments] settle skipped:", err?.message);
+  }
+  return settled;
+}

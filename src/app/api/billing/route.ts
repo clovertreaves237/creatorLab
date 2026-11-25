@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
-import { getAllowance } from "@/lib/payments/server";
+import { getAllowance, settlePendingPayments } from "@/lib/payments/server";
 import { isFapshiTestMode } from "@/lib/payments/fapshi";
 import { planCatalog } from "@/lib/payments/logic";
 
@@ -13,6 +13,8 @@ export async function GET() {
   if ("response" in gate) return gate.response;
 
   try {
+    // Finish any payment that was paid but not confirmed yet, before reading the plan.
+    await settlePendingPayments(gate.account.userId);
     const allowance = await getAllowance(gate.account.userId, gate.account.role);
     const supabase = await createClient();
     const { data: payments } = await supabase

@@ -5,14 +5,13 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { FapshiError, initiatePay, isFapshiTestMode } from "@/lib/payments/fapshi";
 import { loadBillingSettings } from "@/lib/payments/server";
 import { planCatalog, priceFor } from "@/lib/payments/logic";
+import { requestBaseUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
-/** Public base URL for Fapshi's redirect back to CreatorLab. */
+/** Where Fapshi sends the user back: the site they are actually on (never a localhost address on Vercel). */
 function appBaseUrl(request: NextRequest): string {
-  const configured = (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/\/+$/, "");
-  if (/^https?:\/\//.test(configured)) return configured;
-  return request.nextUrl.origin;
+  return requestBaseUrl(request.headers, request.nextUrl.origin);
 }
 
 /**
