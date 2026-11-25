@@ -80,7 +80,19 @@ test("Free vs paid experience", async (t) => {
     assert.doesNotMatch(page, /\.from\("creators"\)/, "creators page must not query the database directly");
     assert.match(page, /openUpgrade\("UPGRADE"\)/, "locked cards open the plan picker");
     const profile = read("src/app/api/profile/route.ts");
-    assert.match(profile, /plan === "free" \? \(recentVideosAll \|\| \[\]\)\.slice\(0, 1\)/);
+    assert.match(profile, /plan === "free" \? \(recentVideosRows \|\| \[\]\)\.slice\(0, 1\)/);
+  });
+
+  await t.test("5b. Outliers never go blank: service read falls back to the user's own access; errors are shown", () => {
+    const route = read("src/app/api/outliers/route.ts");
+    assert.match(route, /source = "session";\s+result = await readNiche\(await createClient\(\), nicheId\)/);
+    assert.match(route, /console\.error\("\[outliers\] service read failed:"/);
+    assert.match(route, /"X-Outliers-Source": source/);
+    const page = read("src/app/(main)/creators/page.tsx");
+    assert.match(page, /if \(!res\.ok\) setOutliersError\(true\)/);
+    assert.match(page, /We couldn&apos;t load the creators/);
+    assert.match(read("src/lib/supabase/service.ts"), /SUPABASE_SERVICE_ROLE_KEY \|\| process\.env\.SUPABASE_SERVICE_KEY/);
+    assert.match(read("supabase/migrations/20261130000001_outlier_lock_atomic_limits.sql"), /X-Outliers-Source is "service"/);
   });
 
   await t.test("6. Database: outlier tables locked for normal users, atomic limit function", () => {

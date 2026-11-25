@@ -104,15 +104,19 @@ function CreatorsContent() {
 
   // Outliers come from the server, already filtered by plan (locked cards carry no creator or video data)
   const [outliers, setOutliers] = useState<{ youtube: OutlierCard[]; tiktok: OutlierCard[]; unlocked: boolean } | null>(null);
+  const [outliersError, setOutliersError] = useState(false);
   const loadOutliers = useCallback(async () => {
     setLoadingCurated(true);
+    setOutliersError(false);
     try {
       const res = await fetch(`/api/outliers?niche=${encodeURIComponent(activeNiche.id)}`, { cache: "no-store" });
       const json = res.ok ? await res.json() : null;
+      if (!res.ok) setOutliersError(true); // show a real error instead of "No creators found"
       setOutliers(json ? { youtube: json.youtube || [], tiktok: json.tiktok || [], unlocked: Boolean(json.unlocked) } : { youtube: [], tiktok: [], unlocked: false });
       setCuratedList(((json ? [...json.youtube, ...json.tiktok] : []) as OutlierCard[]).filter((c): c is UnlockedOutlier => !c.locked));
     } catch (err) {
       console.warn("Error fetching curated creators:", err);
+      setOutliersError(true);
     } finally {
       setLoadingCurated(false);
     }
@@ -324,6 +328,14 @@ function CreatorsContent() {
         {loadingCurated ? (
           <div className="col-span-full py-16 flex flex-col items-center justify-center text-center">
             <MobiusLoader size="md" label="Loading curated creators..." />
+          </div>
+        ) : outliersError ? (
+          <div className="col-span-full flex flex-col items-center gap-4 rounded-2xl border-2 border-ink bg-white p-10 text-center">
+            <p className="text-lg font-extrabold text-ink">We couldn&apos;t load the creators</p>
+            <p className="max-w-md text-sm text-pencil">Check your connection and try again. Your niches and history are safe.</p>
+            <button type="button" onClick={() => loadOutliers()} className="sk-btn-ink min-h-[48px] px-6">
+              Try again
+            </button>
           </div>
         ) : activeCreators.length === 0 ? (
           <div className="col-span-full p-12 hand-card text-center my-4">

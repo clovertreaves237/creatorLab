@@ -7,7 +7,8 @@ import { createClient } from "@supabase/supabase-js";
  */
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Accept the names this key is commonly saved under in Vercel
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SECRET_KEY || "").trim();
   if (!url || !key) {
     throw new Error("Payments are not set up yet (SUPABASE_SERVICE_ROLE_KEY missing on the server).");
   }

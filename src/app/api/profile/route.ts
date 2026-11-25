@@ -80,8 +80,19 @@ export async function GET(request: NextRequest) {
       .eq("creators.active", true)
       .order("published_at", { ascending: false })
       .limit(6);
-    const recentVideos = plan === "free" ? (recentVideosAll || []).slice(0, 1) : recentVideosAll || [];
-    const lockedTopics = plan === "free" ? Math.max(0, (recentVideosAll || []).length - recentVideos.length) : 0;
+    let recentVideosRows = recentVideosAll;
+    if (!recentVideosRows && videoDb !== supabase) {
+      const retry = await supabase
+        .from("videos")
+        .select("video_id, title, video_url, thumbnail_url, published_at, platform, creators!inner(display_name, niche_id, active)")
+        .in("creators.niche_id", nicheFilter)
+        .eq("creators.active", true)
+        .order("published_at", { ascending: false })
+        .limit(6);
+      recentVideosRows = retry.data;
+    }
+    const recentVideos = plan === "free" ? (recentVideosRows || []).slice(0, 1) : recentVideosRows || [];
+    const lockedTopics = plan === "free" ? Math.max(0, (recentVideosRows || []).length - recentVideos.length) : 0;
     const recommendedTopics = recentVideos.map((v: any) => ({
       niche: v.creators?.niche_id,
       title: v.title,

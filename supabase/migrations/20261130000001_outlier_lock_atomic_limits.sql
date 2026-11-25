@@ -12,6 +12,12 @@
 -- future (checked on the server on every request), so no plan column or backfill is needed. Expired plans fall
 -- back to free automatically.
 --
+-- BEFORE APPLYING: confirm the live site reads outliers with the service key. Signed in, open
+--   https://creator-lab-beta.vercel.app/api/outliers?niche=tech-news
+-- and check (browser dev tools -> Network -> Response headers) that X-Outliers-Source is "service".
+-- If it says "session", SUPABASE_SERVICE_ROLE_KEY is missing or wrong in Vercel: fix that first, otherwise
+-- this migration would hide the creators from normal users.
+--
 -- HOW TO APPLY: Supabase Dashboard -> SQL Editor -> New query -> paste this whole file -> Run.
 -- Safe to run more than once. No data is deleted.
 -- =====================================================================================
