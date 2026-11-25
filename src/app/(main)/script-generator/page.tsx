@@ -6,7 +6,7 @@ import { ALLOWED_NICHES, NicheId, getNicheById, isValidNiche } from "@/lib/const
 import { PenLine, Copy, Check, Clock, FileText, AlertTriangle, Download, ShieldCheck, Search, ChevronRight, Loader2, CheckCircle2, Paperclip, Trash2, Eye, History, ChevronDown, ChevronUp, Radio, Plus, ExternalLink, Edit3, RotateCcw, Square } from "lucide-react";
 import Link from "next/link";
 import { MobiusLoader } from "@/components/ui/MobiusLoader";
-import { LogoIcon } from "@/components/ui/Logo";
+import { LogoBadge } from "@/components/brand/Logo";
 import { useMyNiches } from "@/lib/personalization/useMyNiches";
 import { track } from "@/lib/activity/track";
 import { SoundOffer } from "@/components/sound/SoundOffer";
@@ -733,7 +733,7 @@ function ScriptGeneratorContent() {
                       </div>
                     )}
                     <div className="flex items-start gap-3">
-                      <LogoIcon size={32} className="shrink-0" />
+                      <LogoBadge size={32} className="shrink-0" />
                       <div className="flex-1 min-w-0 space-y-3 pt-1">
                         {turn.script ? (
                           <>
@@ -794,7 +794,7 @@ function ScriptGeneratorContent() {
                 {/* 2. ASSISTANT MESSAGE CARD (Generated Script - Real Chatbot UX) */}
                 {loading ? (
                   <div className="flex items-start gap-3">
-                    <LogoIcon size={32} className="shrink-0" />
+                    <LogoBadge size={32} className="shrink-0" />
                     <p className="pt-1.5 text-[15px] text-pencil">
                       Writing your script with the {activeNicheObj.name} rules
                       <span className="sk-caret" aria-hidden="true" />
@@ -802,7 +802,7 @@ function ScriptGeneratorContent() {
                   </div>
                 ) : generatedScript || displayedScript ? (
                   <div className="flex items-start gap-2.5 sm:gap-3">
-                    <LogoIcon size={32} className="shrink-0 mt-1" />
+                    <LogoBadge size={32} className="shrink-0 mt-1" />
 
                     <div className="flex-1 min-w-0 space-y-4 pt-1">
                       {/* Assistant Header & View Mode Switcher (shown once the script is finished) */}
@@ -957,7 +957,7 @@ function ScriptGeneratorContent() {
                   </div>
                 ) : error && sentUserPrompt ? (
                   <div className="flex items-start gap-3">
-                    <LogoIcon size={32} className="shrink-0" />
+                    <LogoBadge size={32} className="shrink-0" />
                     <div className="pt-1.5 space-y-2">
                       <p className="text-[15px] text-red-700">{error}</p>
                       <button type="button" onClick={() => setRawNotesInput(sentUserPrompt)} className="sk-btn-ghost -ml-3 text-xs">

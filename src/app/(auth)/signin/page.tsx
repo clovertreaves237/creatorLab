@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { safeRedirectPath } from "@/lib/auth/redirect";
-import { Logo } from "@/components/ui/Logo";
+import { Logo } from "@/components/brand/Logo";
 import { Eye, EyeOff, Loader2, ShieldCheck, PenLine, ArrowRight, ShieldAlert } from "lucide-react";
 
 /**

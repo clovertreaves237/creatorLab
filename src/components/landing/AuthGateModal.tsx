@@ -2,7 +2,7 @@
 
 import { X, Lock, ArrowRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { Logo, LogoIcon } from "@/components/ui/Logo";
+import { Logo, LogoBadge } from "@/components/brand/Logo";
 
 interface AuthGateModalProps {
   isOpen: boolean;

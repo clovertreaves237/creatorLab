@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Logo } from "@/components/ui/Logo";
+import { Logo } from "@/components/brand/Logo";
 
 const columns = [
   {

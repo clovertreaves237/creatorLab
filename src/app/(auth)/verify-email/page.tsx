@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Mail, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
-import { LogoIcon } from "@/components/ui/Logo";
+import { LogoBadge } from "@/components/brand/Logo";
 
 /**
  * FR-2: Verification gate preventing unverified accounts from signing in.
@@ -18,7 +18,7 @@ function VerifyEmailContent() {
     <div className="w-full max-w-[440px] rounded-2xl bg-white border-2 border-ink p-8 sm:p-9 text-center relative overflow-hidden">
 
       <div className="flex flex-col items-center mb-6">
-        <LogoIcon size={52} className="mb-4" />
+        <LogoBadge size={52} className="mb-4" />
         <div className="w-12 h-12 rounded-2xl bg-accent/20 text-accent border border-accent/30 flex items-center justify-center mb-3">
           <Mail className="w-6 h-6" />
         </div>

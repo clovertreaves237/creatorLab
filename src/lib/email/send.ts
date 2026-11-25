@@ -65,7 +65,7 @@ function layout(heading: string, paragraphs: string[], button: { label: string; 
   const html = `<!doctype html><html><body style="margin:0;background:#FAFAF8;font-family:Arial,Helvetica,sans-serif;color:#18181B">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FAFAF8;padding:32px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:2px solid #18181B;border-radius:12px">
-<tr><td style="padding:28px 28px 8px;font-size:22px;font-weight:800">Creator<span style="color:#2563EB">Lab</span></td></tr>
+<tr><td style="padding:28px 28px 8px;font-size:22px;font-weight:800"><img src="${appUrl("/brand/email-logo.png")}" width="200" height="43" alt="CreatorLab" style="display:block;border:0;height:43px;width:200px;font-size:22px;font-weight:800;color:#18181B"></td></tr>
 <tr><td style="padding:8px 28px 0;font-size:24px;font-weight:800;line-height:1.3">${escapeHtml(heading)}</td></tr>
 ${paragraphs.map((p) => `<tr><td style="padding:14px 28px 0;font-size:16px;line-height:1.6;color:#3f3f46">${escapeHtml(p)}</td></tr>`).join("")}
 <tr><td style="padding:24px 28px 8px"><a href="${button.url}" style="display:inline-block;background:#18181B;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 24px;border-radius:8px">${escapeHtml(button.label)}</a></td></tr>

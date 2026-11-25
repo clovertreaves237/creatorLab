@@ -7,6 +7,7 @@ import { ShieldCheck, RefreshCw, Users, FileText, AlertTriangle, CheckCircle2, G
 import Link from "next/link";
 import { OverviewPanel, CuratorsPanel, AnnouncePanel, SettingsPanel, UserDetail, RoleBadge } from "@/components/admin/AdminPanels";
 import { AuditLogTable } from "@/components/admin/AuditLogTable";
+import { LogoMark } from "@/components/brand/Logo";
 
 export default function AdminDashboardPage() {
   const supabase = createClient();
@@ -231,6 +232,7 @@ export default function AdminDashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight flex items-center gap-3">
+              <LogoMark size={30} />
               <span>Admin Dashboard</span>
             </h1>
             <p className="text-xs text-pencil mt-1">

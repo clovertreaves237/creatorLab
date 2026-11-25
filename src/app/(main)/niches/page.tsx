@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ALLOWED_NICHES, LIVE_NICHES, NicheId, isLiveNiche } from "@/lib/constants/niches";
 import { createClient } from "@/lib/supabase/client";
 import { Check, ArrowRight, Bookmark, PenLine, Layers, TrendingUp, Loader2, Video, CheckCircle2, Search } from "lucide-react";
-import { LogoIcon } from "@/components/ui/Logo";
+import { LogoBadge } from "@/components/brand/Logo";
 import { MobiusLoader } from "@/components/ui/MobiusLoader";
 import { track } from "@/lib/activity/track";
 
@@ -151,7 +151,7 @@ export default function NichesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 animate-in fade-in duration-200">
           <div className="relative w-full max-w-2xl rounded-2xl bg-white border-2 border-ink p-6 sm:p-9 text-center overflow-hidden">
             <div className="flex flex-col items-center mb-6">
-              <LogoIcon size={56} className="mb-4" />
+              <LogoBadge size={56} className="mb-4" />
               <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
                 Welcome to CreatorLab!
               </h2>

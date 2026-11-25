@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { LogoIcon } from "@/components/ui/Logo";
+import { LogoBadge } from "@/components/brand/Logo";
 import { SignInBackLink } from "@/components/layout/SignInBackLink";
 
 export default function NotFound() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 text-center max-w-md mx-auto min-h-[60vh]">
-      <LogoIcon size={52} className="mb-4" />
+      <LogoBadge size={52} className="mb-4" />
       <h2 className="text-3xl font-extrabold text-ink tracking-tight mb-2">
         Page Not Found
       </h2>

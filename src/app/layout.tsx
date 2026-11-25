@@ -24,11 +24,32 @@ const serif = Gelasio({
   display: "swap",
 });
 
+const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://creator-lab-beta.vercel.app").replace(/\/+$/, "");
+const SITE_DESCRIPTION =
+  "Short-form creator intelligence for Cameroon and Africa: curated creators, fresh topics and ready-to-use scripts.";
+
+// Icons come from the file conventions in src/app: icon.svg, favicon.ico, apple-icon.png,
+// opengraph-image.png and twitter-image.png (all built from the pen-nib mark in public/brand).
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "CreatorLab — Master Short-Form Video Content",
-  description:
-    "Curated short-form creator intelligence, topic discovery, and AI-driven script synthesis for African creators.",
+  description: SITE_DESCRIPTION,
+  applicationName: "CreatorLab",
+  openGraph: {
+    type: "website",
+    siteName: "CreatorLab",
+    title: "CreatorLab",
+    description: SITE_DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CreatorLab",
+    description: SITE_DESCRIPTION,
+  },
 };
+
+export const viewport = { themeColor: "#FAFAF8" };
 
 export default function RootLayout({
   children,

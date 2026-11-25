@@ -6,6 +6,7 @@ import Link from "next/link";
 import { CheckCircle2, XCircle, Clock, ArrowRight, RotateCcw, Loader2 } from "lucide-react";
 import { MobiusLoader } from "@/components/ui/MobiusLoader";
 import { TestModeBadge } from "@/components/billing/UpgradeModal";
+import { Logo } from "@/components/brand/Logo";
 import { formatXaf, useCheckout } from "@/components/billing/useCheckout";
 
 type Phase = "checking" | "successful" | "failed" | "expired" | "waiting" | "error";
@@ -71,6 +72,9 @@ function ReturnContent() {
 
   return (
     <div className="mx-auto w-full max-w-lg px-4 py-12 sm:py-20">
+      <div className="mb-6 flex justify-center">
+        <Logo size="sm" />
+      </div>
       <div className="sk-card bg-white p-6 text-center sm:p-9">
         {info?.testMode && <TestModeBadge className="mb-5" />}
 

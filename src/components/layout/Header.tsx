@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Globe, Menu, X, User, LogOut, Settings, ChevronDown, CheckCircle2, Bookmark, ClipboardList, ShieldCheck, CreditCard } from "lucide-react";
-import { Logo } from "@/components/ui/Logo";
+import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { ThemeSettings } from "@/components/layout/ThemeSettings";
 import { createClient } from "@/lib/supabase/client";
