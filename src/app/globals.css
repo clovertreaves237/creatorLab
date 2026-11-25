@@ -1,0 +1,355 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hide Next.js dev indicators */
+nextjs-portal,
+[data-nextjs-toast],
+.nextjs-static-indicator-toast-wrapper,
+.nextjs-toast-errors-parent {
+  display: none !important;
+}
+
+/* ================================================================
+   CREATORLAB SKETCHBOOK DESIGN SYSTEM
+   Source: uilora "hand-drawn" kit. One light theme only.
+   Build every page from these primitives:
+     .sk-btn  .sk-btn-ink  .sk-btn-accent  .sk-btn-ghost   buttons
+     .sk-card .sk-card-flat                                cards / panels
+     .sk-pill                                              badge / eyebrow
+     .sk-input                                             inputs, selects, textareas
+     .sk-tabs / .sk-tab[data-active=true]                  tab bars
+     .sk-row                                               FAQ / list row
+     .hl-yellow|sky|pink|mint|peach                        highlighter word
+     .sticky-note .sticky-pin  .tape-banner                accents
+     .paper-grid                                           grid-paper section bg
+   ================================================================ */
+
+@layer base {
+  /* Theme tokens: RGB channels in src/app/themes.css (Sketchbook is the default).
+     The short names below are what the CSS primitives use. */
+  :root {
+    --paper: rgb(var(--c-paper));
+    --ink: rgb(var(--c-ink));
+    --pencil: rgb(var(--c-pencil));
+    --line: rgb(var(--c-line));
+    --accent: rgb(var(--c-accent));
+    --hl-yellow: rgb(var(--c-hl-yellow));
+    --hl-sky: rgb(var(--c-hl-sky));
+    --hl-mint: rgb(var(--c-hl-mint));
+    --hl-pink: rgb(var(--c-hl-pink));
+    --hl-peach: rgb(var(--c-hl-peach));
+    --hl-tape: rgb(var(--c-hl-tape));
+    color-scheme: light;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    background-image:
+      linear-gradient(to right, rgb(var(--c-ink) / var(--grid-alpha, 0.045)) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--c-ink) / var(--grid-alpha, 0.045)) 1px, transparent 1px);
+    background-size: var(--grid-size, 40px) var(--grid-size, 40px);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4 {
+    @apply text-ink tracking-tight;
+  }
+
+  h1, h2 {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  ::selection {
+    background: var(--hl-yellow);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Form controls default to the sketch input look */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select {
+    @apply bg-white text-ink placeholder:text-pencil-light;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--ink);
+  }
+}
+
+@layer components {
+  /* Hand-drawn outline: the wobble filter sits on a ::before layer only,
+     so text inside stays crisp (same approach as uilora SketchCard). */
+  .sk-btn,
+  .sk-card,
+  .sk-pill,
+  .sk-tabs {
+    position: relative;
+    isolation: isolate;
+    border-color: transparent;
+  }
+  .sk-btn::before,
+  .sk-card::before,
+  .sk-pill::before,
+  .sk-tabs::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    z-index: -1;
+    border: 2px solid var(--ink);
+    border-radius: inherit;
+    background: var(--sk-fill, rgb(var(--c-card)));
+    filter: url(#rough-paper);
+    pointer-events: none;
+    transition: box-shadow 150ms ease;
+  }
+
+  /* ---------- Buttons ---------- */
+  .sk-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border-2 bg-transparent px-5 py-2.5
+      text-sm font-bold text-ink transition-transform duration-150 select-none
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .sk-btn:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+  }
+  .sk-btn:hover:not(:disabled)::before {
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+  .sk-btn:active:not(:disabled) {
+    transform: translate(1px, 1px);
+  }
+  .sk-btn:active:not(:disabled)::before {
+    box-shadow: none;
+  }
+  .sk-btn-ink {
+    @apply sk-btn text-white;
+    --sk-fill: var(--ink);
+  }
+  .sk-btn-accent {
+    @apply sk-btn text-white;
+    --sk-fill: var(--accent);
+  }
+  .sk-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold
+      text-pencil transition-colors hover:bg-ink/[0.05] hover:text-ink disabled:opacity-50;
+  }
+
+  /* ---------- Cards ---------- */
+  .sk-card {
+    @apply rounded-xl border-2 bg-transparent;
+  }
+  .sk-card-flat {
+    @apply rounded-xl border border-line bg-white;
+  }
+
+  /* ---------- Pill / eyebrow ---------- */
+  .sk-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border-2 bg-transparent px-4 py-1.5
+      text-xs font-semibold uppercase tracking-[0.15em] text-ink;
+  }
+
+  /* ---------- Inputs ---------- */
+  .sk-input {
+    @apply w-full rounded-lg border-2 border-ink bg-white px-3.5 py-2.5 text-sm text-ink
+      placeholder:text-pencil-light focus:outline-none focus:ring-2 focus:ring-accent/40;
+  }
+
+  /* ---------- Tabs ---------- */
+  .sk-tabs {
+    @apply inline-flex items-center gap-1 rounded-lg border-2 bg-transparent p-1;
+  }
+  .sk-tab {
+    @apply rounded-md px-3.5 py-1.5 text-sm font-semibold text-pencil transition-colors hover:text-ink;
+  }
+  .sk-tab[data-active="true"] {
+    @apply bg-ink text-white;
+  }
+
+  /* ---------- FAQ / list row ---------- */
+  .sk-row {
+    @apply flex items-center gap-3 border-b border-line py-5 text-ink;
+  }
+
+  /* ---------- Highlighter marks ---------- */
+  .hl-yellow,
+  .hl-sky,
+  .hl-pink,
+  .hl-mint,
+  .hl-peach {
+    @apply inline-block rounded-[3px] px-2;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  .hl-yellow { background-color: var(--hl-yellow); }
+  .hl-sky    { background-color: rgb(var(--c-hl-sky) / 0.7); }
+  .hl-pink   { background-color: rgb(var(--c-hl-pink) / 0.7); }
+  .hl-mint   { background-color: rgb(var(--c-hl-mint) / 0.7); }
+  .hl-peach  { background-color: rgb(var(--c-hl-peach) / 0.7); }
+
+  /* ---------- Sticky note (testimonials) ---------- */
+  .sticky-note {
+    @apply relative bg-hl-tape p-8 sm:p-10 shadow-note;
+    transform: rotate(-1deg);
+  }
+  .sticky-pin {
+    @apply absolute left-1/2 -top-2.5 h-5 w-5 -translate-x-1/2 rounded-full bg-[#EF4444];
+  }
+
+  /* ---------- Tape banner ---------- */
+  .tape-banner {
+    @apply w-full overflow-hidden whitespace-nowrap border-y-2 border-ink bg-hl-tape py-6;
+    filter: url(#rough-paper);
+  }
+
+  /* ---------- Writing cursor (streamed answers) ---------- */
+  .sk-caret {
+    @apply ml-1 inline-block h-[1.05em] w-[0.5em] translate-y-[0.15em] bg-ink;
+    animation: sk-blink 1s steps(2, start) infinite;
+  }
+
+  /* ---------- Grid paper section ---------- */
+  .paper-grid {
+    background-image:
+      linear-gradient(to right, rgb(var(--c-ink) / 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--c-ink) / 0.045) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* ---------- Legacy class names, mapped onto the primitives ---------- */
+  .hand-card,
+  .glass-card,
+  .glass-panel {
+    @apply sk-card;
+  }
+  .hand-btn {
+    @apply sk-btn;
+  }
+  .hand-btn-primary,
+  .btn-primary-kinetic {
+    @apply sk-btn-ink;
+  }
+  .hand-btn-yellow {
+    @apply sk-btn;
+    --sk-fill: var(--hl-tape);
+  }
+  .hand-pill {
+    @apply sk-pill;
+  }
+  .glass-pill {
+    @apply rounded-full border-2 border-ink bg-white;
+  }
+}
+
+@keyframes sk-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--paper);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ink);
+  border-radius: 6px;
+  border: 3px solid var(--paper);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Loader: pencil sketch in the brand palette (src/components/ui/MobiusLoader.tsx)
+   --------------------------------------------------------------------------- */
+.sk-loader { overflow: visible; }
+.sk-loader__ghost { fill: none; stroke: var(--line); stroke-width: 2.2; stroke-linecap: round; }
+.sk-loader__draw {
+  fill: none; stroke: var(--ink); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 100; stroke-dashoffset: 100;
+  animation: sk-draw 2.6s cubic-bezier(.65, 0, .35, 1) infinite;
+}
+.sk-loader__tip {
+  fill: var(--accent); offset-rotate: 0deg; offset-distance: 0%;
+  animation: sk-tip 2.6s cubic-bezier(.65, 0, .35, 1) infinite;
+}
+.sk-loader__hl-stroke {
+  fill: none; stroke-width: 7; stroke-linecap: round; opacity: .9;
+  stroke-dasharray: 100; stroke-dashoffset: 100;
+  animation: sk-hl-sweep 2.6s ease-in-out infinite, sk-hl-colour 13s steps(1) infinite;
+}
+.sk-loader--ai .sk-loader__line {
+  fill: none; stroke: var(--ink); stroke-width: 2.6; stroke-linecap: round;
+  stroke-dasharray: 100; stroke-dashoffset: 100;
+  animation: sk-write 3s ease-in-out infinite;
+}
+.sk-loader--ai .sk-loader__line--2 { animation-delay: .35s; }
+.sk-loader--ai .sk-loader__line--3 { animation-delay: .7s; }
+.sk-loader--ai .sk-loader__hl {
+  transform-origin: 12px 30px; transform: scaleX(0);
+  animation: sk-hl-grow 3s ease-in-out infinite, sk-hl-fill 15s steps(1) infinite;
+  animation-delay: .5s, 0s;
+}
+
+@keyframes sk-draw {
+  0% { stroke-dashoffset: 100; }
+  55% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -100; }
+}
+@keyframes sk-tip {
+  0% { offset-distance: 0%; opacity: 1; }
+  55% { offset-distance: 100%; opacity: 1; }
+  70%, 100% { offset-distance: 100%; opacity: 0; }
+}
+@keyframes sk-hl-sweep {
+  0%, 15% { stroke-dashoffset: 100; }
+  55%, 80% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -100; }
+}
+@keyframes sk-hl-colour {
+  0% { stroke: var(--hl-yellow); } 20% { stroke: var(--hl-sky); } 40% { stroke: var(--hl-mint); } 60% { stroke: var(--hl-pink); } 80% { stroke: var(--hl-peach); }
+}
+@keyframes sk-write {
+  0% { stroke-dashoffset: 100; }
+  40%, 75% { stroke-dashoffset: 0; }
+  95%, 100% { stroke-dashoffset: -100; }
+}
+@keyframes sk-hl-grow {
+  0%, 20% { transform: scaleX(0); }
+  45%, 75% { transform: scaleX(1); }
+  95%, 100% { transform: scaleX(0); }
+}
+@keyframes sk-hl-fill {
+  0% { fill: var(--hl-yellow); } 20% { fill: var(--hl-sky); } 40% { fill: var(--hl-mint); } 60% { fill: var(--hl-pink); } 80% { fill: var(--hl-peach); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-loader__draw, .sk-loader--ai .sk-loader__line { animation: none; stroke-dashoffset: 0; }
+  .sk-loader__hl-stroke { animation: none; stroke: var(--hl-yellow); stroke-dashoffset: 0; }
+  .sk-loader--ai .sk-loader__hl { animation: none; transform: scaleX(1); fill: var(--hl-yellow); }
+  .sk-loader__tip { animation: none; opacity: 0; }
+}
