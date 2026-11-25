@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Globe, Menu, X, User, LogOut, Settings, ChevronDown, CheckCircle2, Bookmark, ClipboardList, ShieldCheck } from "lucide-react";
+import { Globe, Menu, X, User, LogOut, Settings, ChevronDown, CheckCircle2, Bookmark, ClipboardList, ShieldCheck, CreditCard } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { ThemeSettings } from "@/components/layout/ThemeSettings";
@@ -180,6 +180,7 @@ export function Header() {
                   {[
                     { href: "/niches", icon: Bookmark, label: "Saved Niches" },
                     { href: "/profile", icon: User, label: "Profile & Dashboard" },
+                    { href: "/billing", icon: CreditCard, label: "Plan & Billing" },
                     { href: "/account", icon: Settings, label: "Account Settings" },
                     ...(staff.isCurator ? [{ href: "/profile?tab=curator", icon: ClipboardList, label: "Curator Workspace" }] : []),
                     ...(staff.adminPath ? [{ href: staff.adminPath, icon: ShieldCheck, label: "Admin Portal" }] : []),
@@ -259,6 +260,9 @@ export function Header() {
             <>
               <Link href="/profile" onClick={() => setMobileMenuOpen(false)} className="py-3 text-base text-ink border-b border-line">
                 Profile & Dashboard
+              </Link>
+              <Link href="/billing" onClick={() => setMobileMenuOpen(false)} className="py-3 text-base text-ink border-b border-line">
+                Plan &amp; Billing
               </Link>
               <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="py-3 text-base text-ink border-b border-line">
                 Account Settings

@@ -9,6 +9,7 @@ import {
 } from "@/lib/scripts/gemini";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole, hasRole } from "@/lib/auth/roles";
+import { getAllowance } from "@/lib/payments/server";
 import {
   saveGeneratedScript,
   getRecentScriptsForNiche,
@@ -89,11 +90,15 @@ export async function POST(request: NextRequest) {
     ).length;
     const targetDuration = typeof body.duration_seconds === "number" ? body.duration_seconds : 120;
 
-    // NFR-20: daily script limit per user (set by admins; admins are not limited)
+    // Plans: free = free_scripts_per_day per rolling 24h; Pro (paid via Fapshi) and staff = daily_script_limit (NFR-20).
+    // Admins are not limited. Enforced here on the server, whatever the browser shows.
     if (!hasRole(gate.account.role, "admin")) {
-      const limitCheck = await checkDailyLimit(gate.account.userId);
-      if (limitCheck) {
-        return NextResponse.json({ error: limitCheck }, { status: 429 });
+      const allowance = await getAllowance(gate.account.userId, gate.account.role).catch(() => null);
+      if (allowance?.blocked) {
+        return NextResponse.json(
+          { error: allowance.blocked.message, code: allowance.blocked.code, nextAt: allowance.blocked.nextAt, plan: allowance.plan },
+          { status: 429 }
+        );
       }
     }
 
@@ -340,26 +345,3 @@ async function recordAndSaveScript(
   return { generatedHook, savedRecord };
 }
 
-/** Returns an error message when the user has reached today's script limit (NFR-20), otherwise null. */
-async function checkDailyLimit(userId: string): Promise<string | null> {
-  try {
-    const supabase = await createClient();
-    const { data: setting } = await supabase.from("app_settings").select("value").eq("key", "daily_script_limit").maybeSingle();
-    const limit = Number(setting?.value ?? 20);
-    if (!Number.isFinite(limit) || limit <= 0) return null;
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const { count, error } = await supabase
-      .from("generated_scripts")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("created_at", startOfToday.toISOString());
-    if (error) return null; // table not migrated yet: do not block
-    if ((count ?? 0) >= limit) {
-      return `You have used all ${limit} scripts for today. Your limit resets at midnight.`;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}

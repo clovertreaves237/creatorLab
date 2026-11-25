@@ -95,6 +95,7 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/script-generator") ||
     path.startsWith("/profile") ||
     path.startsWith("/account") ||
+    path.startsWith("/billing") ||
     path.startsWith("/onboarding");
 
   // FR-2: Unverified accounts cannot proceed to protected features

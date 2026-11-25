@@ -10,6 +10,8 @@ import { LogoIcon } from "@/components/ui/Logo";
 import { useMyNiches } from "@/lib/personalization/useMyNiches";
 import { track } from "@/lib/activity/track";
 import { SoundOffer } from "@/components/sound/SoundOffer";
+import { UpgradeModal, type UpgradeInfo } from "@/components/billing/UpgradeModal";
+import { formatUnlockTime } from "@/components/billing/useCheckout";
 
 const MAX_NOTES_CHARS = 5000;
 
@@ -89,6 +91,35 @@ function ScriptGeneratorContent() {
 
   // History state: "the history is only created when there have been past generation"
   const [historyList, setHistoryList] = useState<ScriptHistoryItem[]>([]);
+
+  // Plan and free allowance. The server enforces the limits; this only drives the UI.
+  const [billing, setBilling] = useState<any>(null);
+  const [upgradeInfo, setUpgradeInfo] = useState<UpgradeInfo | null>(null);
+  const loadBilling = async () => {
+    try {
+      const res = await fetch("/api/billing", { cache: "no-store" });
+      const json = res.ok ? await res.json() : null;
+      if (json) setBilling(json);
+      return json;
+    } catch {
+      return null;
+    }
+  };
+  useEffect(() => {
+    loadBilling();
+  }, []);
+  const openUpgrade = async (code: UpgradeInfo["code"], nextAt: string | null) => {
+    const b = billing || (await loadBilling());
+    setUpgradeInfo({
+      code,
+      nextAt,
+      price: b?.price ? { amount: b.price.amount, days: b.price.days } : { amount: 1000, days: 30 },
+      dailyLimit: b?.dailyLimit ?? 20,
+      testMode: b?.testMode ?? true,
+      freePerDay: b?.free?.limit,
+    });
+  };
+  const blockedNow = billing?.blocked && (!billing.blocked.nextAt || new Date(billing.blocked.nextAt).getTime() > Date.now()) ? billing.blocked : null;
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
 
   // Chat message thread scroll refs
@@ -268,6 +299,12 @@ function ScriptGeneratorContent() {
 
     const effectiveTopic = extractTopicFromNotes(inputPrompt, activeNicheObj.name);
 
+    // Out of scripts for now: explain and offer Pro instead of sending (the input is kept as typed)
+    if (blockedNow) {
+      openUpgrade(blockedNow.code, blockedNow.nextAt);
+      return;
+    }
+
     // Keep the previous exchange in the thread, then capture the new user message and empty the input field
     archiveCurrentTurn();
     setSentUserPrompt(inputPrompt || effectiveTopic);
@@ -303,6 +340,21 @@ function ScriptGeneratorContent() {
         }),
         signal: controller.signal,
       });
+
+      if (res.status === 429) {
+        const limit = await res.json().catch(() => ({}));
+        if (limit.code === "FREE_LIMIT_REACHED" || limit.code === "DAILY_LIMIT_REACHED") {
+          // Give the typed text back and show the plan options
+          setRawNotesInput(inputPrompt);
+          setContextAttachments(contextAttachments);
+          setSentUserPrompt("");
+          setSentAttachments([]);
+          loadBilling();
+          openUpgrade(limit.code, limit.nextAt ?? null);
+          return;
+        }
+        throw new Error(limit.error || "You have reached your script limit for now.");
+      }
 
       if (!res.ok || !res.body) {
         const failure = await res.json().catch(() => ({}));
@@ -359,6 +411,7 @@ function ScriptGeneratorContent() {
         created_at: new Date().toISOString(),
       };
       setHistoryList((prev) => [newHistoryItem, ...prev]);
+      loadBilling(); // the free allowance just changed
     } catch (err: any) {
       if (controller.signal.aborted) {
         // User pressed Stop: keep what was written so far, editable, with stats for the partial text.
@@ -1016,6 +1069,37 @@ function ScriptGeneratorContent() {
           {/* BOTTOM DOCKED INPUT CAPSULE (chat controls) */}
           {/* ============================================================ */}
           <div className="p-2 sm:p-3 bg-white border-t border-line shrink-0">
+            {/* Plan line: free scripts left / next free script / Pro end date */}
+            {billing && billing.plan !== "staff" && (
+              <div className="max-w-4xl mx-auto mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-[11px] sm:text-xs">
+                {billing.plan === "pro" ? (
+                  <span className="inline-flex items-center gap-1.5 text-pencil">
+                    <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">PRO</span>
+                    Active until {new Date(billing.proUntil).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+                  </span>
+                ) : blockedNow ? (
+                  <span className="inline-flex items-center gap-1.5 text-pencil">
+                    <Clock className="h-3.5 w-3.5 shrink-0 text-ink" />
+                    Free script used · next one {blockedNow.nextAt ? formatUnlockTime(blockedNow.nextAt) : "tomorrow"}
+                  </span>
+                ) : (
+                  <span className="text-pencil">
+                    <span className="font-bold text-ink">{billing.free?.remaining ?? 0}</span> free script{billing.free?.remaining === 1 ? "" : "s"} left today
+                  </span>
+                )}
+                {billing.plan === "free" && (
+                  <button
+                    type="button"
+                    onClick={() => (blockedNow ? openUpgrade(blockedNow.code, blockedNow.nextAt) : openUpgrade("UPGRADE", null))}
+                    className="font-bold text-ink underline decoration-2 underline-offset-4 hover:text-accent"
+                  >
+                    Subscribe for more
+                  </button>
+                )}
+              </div>
+            )}
+            <UpgradeModal info={upgradeInfo} onClose={() => setUpgradeInfo(null)} />
+
             {/* Warning banner when limit reached */}
             {isOverLimit && (
               <div className="mb-2 p-2 rounded-xl bg-red-50 border border-red-300 text-red-700 text-[11px] flex items-center gap-1.5 shrink-0">

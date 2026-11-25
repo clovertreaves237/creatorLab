@@ -533,15 +533,40 @@ export function SettingsPanel() {
   const [limit, setLimit] = useState<string>("");
   const [invites, setInvites] = useState<any[]>([]);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [billing, setBilling] = useState({ free_scripts_per_day: "", pro_price_xaf: "", pro_days: "" });
+  const [billingMessage, setBillingMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = () =>
     fetch("/api/admin/settings", { cache: "no-store" })
       .then((r) => r.json())
       .then((json) => {
         setLimit(String(json.settings?.daily_script_limit ?? 20));
+        setBilling({
+          free_scripts_per_day: String(json.settings?.free_scripts_per_day ?? 1),
+          pro_price_xaf: String(json.settings?.pro_price_xaf ?? 1000),
+          pro_days: String(json.settings?.pro_days ?? 30),
+        });
         setInvites(json.invitations || []);
       })
       .catch(() => {});
+
+  const saveBilling = async () => {
+    setBillingMessage(null);
+    for (const key of ["free_scripts_per_day", "pro_price_xaf", "pro_days"] as const) {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value: Number(billing[key]) }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        const label = key === "pro_price_xaf" ? "Price (100 XAF or more)" : key === "pro_days" ? "Days (1 to 366)" : "Free scripts (0 to 100)";
+        setBillingMessage({ ok: false, text: `${label}: ${json.error || "could not save."}` });
+        return;
+      }
+    }
+    setBillingMessage({ ok: true, text: "Saved. New checkouts use these values." });
+  };
   useEffect(() => {
     load();
   }, []);
@@ -569,6 +594,32 @@ export function SettingsPanel() {
           </button>
         </div>
         {message && <p className={`text-sm ${message.ok ? "text-score" : "text-red-700"}`}>{message.text}</p>}
+      </section>
+
+      <section className="sk-card space-y-4 p-6">
+        <h3 className="font-bold text-ink">Plans &amp; payments</h3>
+        <p className="text-sm text-pencil">
+          Free accounts get a number of scripts per rolling 24 hours. Pro is paid once through Fapshi (MTN Mobile Money or
+          Orange Money) and lasts the number of days below. Pro users follow the daily script limit.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="text-xs font-bold text-ink">
+            Free scripts / 24h
+            <input type="number" min={0} max={100} className="sk-input mt-1 w-full" value={billing.free_scripts_per_day} onChange={(e) => setBilling((b) => ({ ...b, free_scripts_per_day: e.target.value }))} />
+          </label>
+          <label className="text-xs font-bold text-ink">
+            Pro price (XAF)
+            <input type="number" min={100} step={50} className="sk-input mt-1 w-full" value={billing.pro_price_xaf} onChange={(e) => setBilling((b) => ({ ...b, pro_price_xaf: e.target.value }))} />
+          </label>
+          <label className="text-xs font-bold text-ink">
+            Pro length (days)
+            <input type="number" min={1} max={366} className="sk-input mt-1 w-full" value={billing.pro_days} onChange={(e) => setBilling((b) => ({ ...b, pro_days: e.target.value }))} />
+          </label>
+        </div>
+        <button type="button" onClick={saveBilling} className="sk-btn-ink px-5 py-2.5">
+          Save plan settings
+        </button>
+        {billingMessage && <p className={`text-sm ${billingMessage.ok ? "text-score" : "text-red-700"}`}>{billingMessage.text}</p>}
       </section>
 
       <section className="sk-card p-6">
