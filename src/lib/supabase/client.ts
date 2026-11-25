@@ -20,9 +20,25 @@ export function createClient() {
     return createBrowserClient(supabaseUrl!, supabaseAnonKey!);
   }
 
-  // Graceful local test mock client implementing Supabase Auth interface
+  // A production build without the Supabase variables cannot work. NEXT_PUBLIC_* values are fixed into the
+  // browser code at build time, so they must be set in Vercel BEFORE the build (then redeploy).
+  // Fail with a readable message (shown by app/global-error.tsx) instead of a half-working mock.
+  if (process.env.NODE_ENV === "production") {
+    const missing = [
+      !supabaseUrl || supabaseUrl.includes("placeholder") || supabaseUrl.includes("your-project") ? "NEXT_PUBLIC_SUPABASE_URL" : null,
+      !supabaseAnonKey ? "NEXT_PUBLIC_SUPABASE_ANON_KEY" : null,
+    ].filter(Boolean);
+    throw new Error(
+      `CreatorLab setup: missing ${missing.join(" and ")}. Add ${missing.length > 1 ? "them" : "it"} in Vercel (Settings → Environment Variables), then redeploy.`
+    );
+  }
+
+  // Local development only: offline mock client implementing the Supabase Auth calls the app uses
   return {
     auth: {
+      onAuthStateChange() {
+        return { data: { subscription: { unsubscribe() {} } } };
+      },
       async signUp({ email, password, options }: any) {
         // Validation per FR-1
         if (!email || !password) {
