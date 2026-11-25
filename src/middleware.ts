@@ -1,6 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { DEFAULT_AFTER_LOGIN, safeRedirectPath } from "@/lib/auth/redirect";
+import { adminPortalDecision, matchAdminPath, normalizeAdminPath } from "@/lib/auth/admin-path";
+
+// TEMPORARY diagnostic: logs once per server instance whether the admin path is configured (length only, never the value).
+let adminConfigLogged = false;
+function logAdminConfigOnce(raw: string | undefined) {
+  if (adminConfigLogged) return;
+  adminConfigLogged = true;
+  const clean = normalizeAdminPath(raw);
+  console.info(
+    `[admin-portal] path configured: ${clean.length > 0}, length: ${clean.length}, raw set: ${typeof raw === "string" && raw.length > 0}, ` +
+      `raw had extra spaces/slashes: ${typeof raw === "string" && raw.length !== clean.length}`
+  );
+}
 
 /**
  * Root middleware:
@@ -61,17 +74,27 @@ export async function middleware(request: NextRequest) {
     return { role: basic.data?.role as string | undefined, onboarded: true, known: false };
   };
 
-  // Secret admin portal path -> serve the admin page, but only to verified admins. Everyone else: 404.
-  const adminPath = "/" + (process.env.ADMIN_PORTAL_PATH || "").replace(/^\/+|\/+$/g, "");
-  if (adminPath.length > 8 && (path === adminPath || path.startsWith(adminPath + "/"))) {
-    // Logged-out visitors get the same 404 as any wrong URL, so the path cannot be discovered by probing.
-    // Admins sign in first, then open the link.
-    if (!user) return notFound();
-    const profile = await loadProfile();
-    const isAdmin = Boolean(user.email_confirmed_at) && (profile?.role === "admin" || profile?.role === "super_admin");
-    if (!isAdmin) return notFound();
+  // Secret admin portal path (read at request time) -> serve the admin page, but only to verified admins.
+  // Everyone else gets the same 404 as any wrong URL, so the path cannot be discovered by probing.
+  const rawAdminPath = process.env.ADMIN_PORTAL_PATH;
+  logAdminConfigOnce(rawAdminPath);
+  if (matchAdminPath(path, rawAdminPath) !== null) {
+    const profile = user ? await loadProfile() : null;
+    const decision = adminPortalDecision({
+      pathname: path,
+      rawPath: rawAdminPath,
+      signedIn: Boolean(user),
+      emailConfirmed: Boolean(user?.email_confirmed_at),
+      role: profile?.role,
+    });
+    // TEMPORARY diagnostic (booleans only, never the path or the user): remove once the portal works live.
+    console.info(
+      `[admin-portal] request matched: true, signed in: ${Boolean(user)}, email confirmed: ${Boolean(user?.email_confirmed_at)}, ` +
+        `profile found: ${Boolean(profile?.role)}, is admin: ${decision.kind === "rewrite"}`
+    );
+    if (decision.kind !== "rewrite") return notFound();
     const target = request.nextUrl.clone();
-    target.pathname = "/admin" + path.slice(adminPath.length);
+    target.pathname = decision.to;
     const rewrite = NextResponse.rewrite(target, { request });
     supabaseResponse.cookies.getAll().forEach((c) => rewrite.cookies.set(c));
     return rewrite;

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { LogoIcon } from "@/components/ui/Logo";
+import { SignInBackLink } from "@/components/layout/SignInBackLink";
 
 export default function NotFound() {
   return (
@@ -19,6 +20,7 @@ export default function NotFound() {
         <ArrowLeft className="w-4 h-4" />
         <span>Return to Niches</span>
       </Link>
+      <SignInBackLink />
     </div>
   );
 }

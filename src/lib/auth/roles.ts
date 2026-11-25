@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { adminPathHref } from "./admin-path";
 
 /**
  * Roles come ONLY from public.profiles.role (set by the database's role functions).
@@ -83,7 +84,5 @@ export async function requireRole(
 
 /** Secret URL path of the admin portal (set ADMIN_PORTAL_PATH in .env.local). */
 export function adminPortalPath(): string {
-  const raw = process.env.ADMIN_PORTAL_PATH || "";
-  const clean = raw.replace(/^\/+|\/+$/g, "");
-  return clean ? `/${clean}` : "";
+  return adminPathHref(process.env.ADMIN_PORTAL_PATH);
 }
